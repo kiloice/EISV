@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="eisv-version" content="1.1">
   <link rel="icon" href="data:,">
-  <title>凹位装配模拟验证器</title>
+  <title>凹位装配模拟验证器 v1.1</title>
   <style>
     :root {
       color-scheme: light;
@@ -13,14 +14,19 @@
       --line: rgba(125, 221, 255, 0.38);
       --panel: #05255d;
       --page: #031a46;
-      --solid: rgba(44, 98, 159, 0.54);
-      --solid-line: rgba(177, 232, 255, 0.34);
       --ok: #5cf0a7;
       --warn: #ff707d;
       --wait: #ffd166;
       --accent: #2cc7ff;
       --part: #ff697f;
-      --part-soft: rgba(255, 105, 127, 0.18);
+      /* 工程图线（GB/T 4457.4 粗:细 ≈ 2:1，屏幕像素） */
+      --draft-ink: #e8f6ff;
+      --draft-ink-dim: #b7dff5;
+      --draft-thick: 1.8px;
+      --draft-thin: 0.9px;
+      --draft-hatch: rgba(170, 220, 245, 0.72);
+      --space-fill: rgba(6, 28, 72, 0.42);
+      --part-fill: rgba(255, 105, 127, 0.12);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
         "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
     }
@@ -57,6 +63,21 @@
       letter-spacing: 0;
       color: #f5fcff;
       text-shadow: 0 2px 10px rgba(2, 40, 97, 0.42);
+    }
+
+    .version {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      padding: 3px 10px;
+      border: 1px solid rgba(125, 221, 255, 0.35);
+      border-radius: 999px;
+      color: #9fd8f5;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      background: rgba(4, 32, 91, 0.55);
     }
 
     .lead {
@@ -294,93 +315,103 @@
       line-height: 1.6;
     }
 
+    /*
+     * 工程图线（参考 GB/T 4457.4 / ISO 128）
+     * 粗实线 : 细实线 ≈ 2 : 1；non-scaling-stroke 保持屏幕线宽比
+     */
+    .draft-thick,
+    .draft-thin,
+    .draft-dash,
+    .draft-aux {
+      fill: none;
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+      vector-effect: non-scaling-stroke;
+    }
+
+    /* 粗实线：可见轮廓 */
+    .draft-thick {
+      stroke: var(--draft-ink);
+      stroke-width: var(--draft-thick);
+    }
+
+    /* 细实线：尺寸线、尺寸界线 */
+    .draft-thin {
+      stroke: var(--draft-ink-dim);
+      stroke-width: var(--draft-thin);
+    }
+
+    /* 细虚线：开口参考 / 假想轮廓 */
+    .draft-dash {
+      stroke: rgba(160, 220, 245, 0.72);
+      stroke-width: var(--draft-thin);
+      stroke-dasharray: 4 2.5;
+    }
+
+    /* 装入轨迹（示意用辅助线，非标准图线） */
+    .draft-aux {
+      stroke: rgba(60, 199, 255, 0.75);
+      stroke-width: var(--draft-thin);
+      stroke-dasharray: 5 4;
+      stroke-linecap: round;
+    }
+
+    /* 剖面区域：仅 45° 细实线剖面线 */
     .wall {
-      fill: url(#hatch);
+      fill: url(#hatchMetal);
       stroke: none;
     }
 
+    /* 空腔：浅底、无剖面线 */
     .cavity-fill {
-      fill: rgba(11, 43, 103, 0.52);
+      fill: var(--space-fill);
       stroke: none;
     }
 
-    .cavity-wall {
-      fill: none;
-      stroke: #d9f7ff;
-      stroke-width: 2.6;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-      filter: drop-shadow(0 0 2px rgba(44, 199, 255, 0.45));
-    }
-
-    .opening-line {
-      stroke: rgba(121, 226, 255, 0.34);
-      stroke-width: 0.55;
-      stroke-dasharray: 2 5;
-      stroke-linecap: round;
-    }
-
-    .dim {
-      stroke: rgba(222, 250, 255, 0.78);
-      stroke-width: 0.8;
-      fill: none;
-      stroke-linecap: square;
-    }
-
-    .dim-help {
-      stroke: rgba(184, 230, 255, 0.48);
-      stroke-width: 0.7;
-      stroke-linecap: square;
+    .dim-line {
+      marker-start: url(#dimArrowStart);
+      marker-end: url(#dimArrowEnd);
     }
 
     .dim-text,
     .label-text {
-      fill: #f3fcff;
-      font-size: 9px;
-      font-weight: 800;
+      fill: #f0faff;
+      font-size: 10px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
       dominant-baseline: middle;
-      paint-order: stroke;
-      stroke: #06265d;
-      stroke-width: 3px;
-      stroke-linejoin: round;
+      stroke: none;
     }
 
     .label-text.muted {
-      fill: rgba(232, 250, 255, 0.78);
-      font-size: 8px;
-      font-weight: 300;
-    }
-
-    .path-line {
-      fill: none;
-      stroke: #3cc7ff;
-      stroke-width: 2;
-      stroke-dasharray: 4 5;
-      opacity: 1;
-      filter: drop-shadow(0 0 2px rgba(44, 199, 255, 0.42));
+      fill: rgba(200, 230, 245, 0.78);
+      font-size: 9px;
+      font-weight: 500;
     }
 
     .turn-dot {
-      fill: #3cc7ff;
-      stroke: #f4fcff;
-      stroke-width: 1.2;
+      fill: rgba(60, 199, 255, 0.9);
+      stroke: #061f55;
+      stroke-width: 0.8;
+      vector-effect: non-scaling-stroke;
     }
 
     #partFill {
-      fill: var(--part-soft);
+      fill: var(--part-fill);
       stroke: none;
-      rx: 1.5;
     }
 
     #partRect {
       fill: none;
       stroke: var(--part);
-      stroke-width: 2;
-      rx: 1.5;
+      stroke-width: var(--draft-thick);
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+      vector-effect: non-scaling-stroke;
     }
 
     #part.blocked #partFill {
-      fill: rgba(180, 35, 24, 0.18);
+      fill: rgba(180, 35, 24, 0.16);
     }
 
     #part.blocked #partRect {
@@ -388,14 +419,13 @@
     }
 
     #partText {
-      fill: #fff4f6;
-      font-size: 13px;
-      font-weight: 900;
+      fill: #ffe8ec;
+      font-size: 11px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
       text-anchor: middle;
       dominant-baseline: middle;
-      paint-order: stroke;
-      stroke: #a62d47;
-      stroke-width: 3px;
+      stroke: none;
     }
 
     #part.blocked #partText {
@@ -404,9 +434,32 @@
 
     .ghost {
       fill: none;
-      stroke: rgba(92, 240, 167, 0.58);
-      stroke-width: 1.6;
-      stroke-dasharray: 5 4;
+      stroke: rgba(92, 240, 167, 0.7);
+      stroke-width: var(--draft-thin);
+      stroke-dasharray: 4 2.5;
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .hit-dot {
+      fill: #ff707d;
+      stroke: #fff4f6;
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .hit-label {
+      fill: #ffd0d5;
+      font-size: 9px;
+      font-weight: 600;
+      stroke: none;
+    }
+
+    #hatchMetal line {
+      stroke: var(--draft-hatch);
+      stroke-width: 0.45;
+      vector-effect: non-scaling-stroke;
     }
 
     @media (max-width: 1100px) {
@@ -483,7 +536,8 @@
   <main>
     <header>
       <h1>凹位装配模拟验证器</h1>
-      <p class="lead">输入空腔和矩形尺寸后点击验证。左右退进会与下方开口自动联动；左右空腔高度和内外角弧度可不同。计算按二维剖面近似：矩形只能从下方开口进入，可旋转，最终水平放到顶部。</p>
+      <p class="version">v1.1 · 二维剖面 · 可扩展至 v2 三维</p>
+      <p class="lead">输入空腔和矩形尺寸后点击验证。左右退进会与下方开口自动联动；左右空腔高度和内外圆角半径可不同。计算按二维剖面近似：矩形只能从下方开口进入，可旋转，最终水平放到顶部。安装间隙会收紧碰撞判定；最终贴顶时，离顶距离须不小于安装间隙，二者会互相制约。</p>
     </header>
 
     <section class="workspace" aria-label="凹位尺寸验证工具">
@@ -494,60 +548,71 @@
         <div class="svg-wrap">
           <svg id="diagram" viewBox="-30 -30 292 240" role="img" aria-labelledby="svgTitle svgDesc">
             <title id="svgTitle">凹位尺寸和矩形装入路径示意</title>
-            <desc id="svgDesc">可输入顶部净宽、下方开口、左右退进、左右空腔高度、左右内外角弧度、矩形长度和高度。矩形从下方开口旋转进入。</desc>
+            <desc id="svgDesc">可输入顶部净宽、下方开口、左右退进、左右空腔高度、左右内外圆角半径、矩形长度和高度、安装间隙。矩形从下方开口旋转进入。</desc>
             <defs>
-              <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                <rect width="8" height="8" fill="var(--solid)"></rect>
-                <line x1="0" y1="0" x2="0" y2="8" stroke="var(--solid-line)" stroke-width="1"></line>
+              <!-- 金属剖面线：45° 细实线，间距由脚本按图幅调整 -->
+              <pattern id="hatchMetal" width="4.5" height="4.5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <line id="hatchMetalLine" x1="0" y1="0" x2="0" y2="4.5"></line>
               </pattern>
+              <!-- 尺寸箭头：闭口实心；marker 随线宽缩放，配合 non-scaling 细实线保持屏幕可读 -->
+              <marker id="dimArrowEnd" viewBox="0 0 10 6" refX="9.5" refY="3" markerWidth="9" markerHeight="6" orient="auto" markerUnits="strokeWidth">
+                <path d="M0 0.4 L9.5 3 L0 5.6 Z" fill="#b7dff5"></path>
+              </marker>
+              <marker id="dimArrowStart" viewBox="0 0 10 6" refX="0.5" refY="3" markerWidth="9" markerHeight="6" orient="auto" markerUnits="strokeWidth">
+                <path d="M10 0.4 L0.5 3 L10 5.6 Z" fill="#b7dff5"></path>
+              </marker>
             </defs>
 
             <path id="wallPath" class="wall" fill-rule="evenodd"></path>
             <path id="cavityFill" class="cavity-fill"></path>
-            <path id="cavityWall" class="cavity-wall"></path>
-            <line id="openingLine" class="opening-line"></line>
-            <path id="travelPath" class="path-line" d=""></path>
+            <path id="cavityWall" class="cavity-wall draft-thick"></path>
+            <line id="openingLine" class="opening-line draft-dash"></line>
+            <path id="travelPath" class="path-line draft-aux" d=""></path>
             <g id="turnDots"></g>
             <rect id="ghost" class="ghost"></rect>
+            <g id="hitMarker" visibility="hidden">
+              <circle id="hitDot" class="hit-dot" r="2.4"></circle>
+              <text id="hitLabel" class="hit-label"></text>
+            </g>
 
             <g id="topDim">
-              <line id="topDimHelpLeft" class="dim-help"></line>
-              <line id="topDimHelpRight" class="dim-help"></line>
-              <line id="topDimLine" class="dim"></line>
+              <line id="topDimHelpLeft" class="dim-ext draft-thin"></line>
+              <line id="topDimHelpRight" class="dim-ext draft-thin"></line>
+              <line id="topDimLine" class="dim-line draft-thin"></line>
               <text id="topDimText" class="dim-text" text-anchor="middle"></text>
             </g>
             <g id="entryDim">
-              <line id="entryDimHelpLeft" class="dim-help"></line>
-              <line id="entryDimHelpRight" class="dim-help"></line>
-              <line id="entryDimLine" class="dim"></line>
+              <line id="entryDimHelpLeft" class="dim-ext draft-thin"></line>
+              <line id="entryDimHelpRight" class="dim-ext draft-thin"></line>
+              <line id="entryDimLine" class="dim-line draft-thin"></line>
               <text id="entryDimText" class="dim-text" text-anchor="middle"></text>
             </g>
             <g id="depthDim">
-              <line id="depthDimHelpTop" class="dim-help"></line>
-              <line id="depthDimHelpBottom" class="dim-help"></line>
-              <line id="depthDimLine" class="dim"></line>
-              <text id="depthDimText" class="dim-text"></text>
+              <line id="depthDimHelpTop" class="dim-ext draft-thin"></line>
+              <line id="depthDimHelpBottom" class="dim-ext draft-thin"></line>
+              <line id="depthDimLine" class="dim-line draft-thin"></line>
+              <text id="depthDimText" class="dim-text" text-anchor="start"></text>
             </g>
             <g id="leftHeightDim">
-              <line id="leftHeightDimHelpTop" class="dim-help"></line>
-              <line id="leftHeightDimHelpBottom" class="dim-help"></line>
-              <line id="leftHeightDimLine" class="dim"></line>
+              <line id="leftHeightDimHelpTop" class="dim-ext draft-thin"></line>
+              <line id="leftHeightDimHelpBottom" class="dim-ext draft-thin"></line>
+              <line id="leftHeightDimLine" class="dim-line draft-thin"></line>
               <text id="leftHeightDimText" class="dim-text" text-anchor="end"></text>
             </g>
             <g id="stepDim">
-              <line id="stepDimHelpLeft" class="dim-help"></line>
-              <line id="stepDimHelpRight" class="dim-help"></line>
-              <line id="stepDimLine" class="dim"></line>
+              <line id="stepDimHelpLeft" class="dim-ext draft-thin"></line>
+              <line id="stepDimHelpRight" class="dim-ext draft-thin"></line>
+              <line id="stepDimLine" class="dim-line draft-thin"></line>
               <text id="stepDimText" class="dim-text" text-anchor="middle"></text>
             </g>
             <g id="leftStepDim">
-              <line id="leftStepDimHelpLeft" class="dim-help"></line>
-              <line id="leftStepDimHelpRight" class="dim-help"></line>
-              <line id="leftStepDimLine" class="dim"></line>
+              <line id="leftStepDimHelpLeft" class="dim-ext draft-thin"></line>
+              <line id="leftStepDimHelpRight" class="dim-ext draft-thin"></line>
+              <line id="leftStepDimLine" class="dim-line draft-thin"></line>
               <text id="leftStepDimText" class="dim-text" text-anchor="middle"></text>
             </g>
 
-            <text id="solidLabel" class="label-text muted">实体</text>
+            <text id="solidLabel" class="label-text muted">金属</text>
 
             <g id="part">
               <rect id="partFill"></rect>
@@ -587,19 +652,19 @@
               <input id="rightHeightInput" type="number" inputmode="decimal" min="1" step="0.5" value="50">
             </label>
             <label for="leftOuterRadiusInput">
-              左外角弧度（mm）
+              左外角圆角半径（mm）
               <input id="leftOuterRadiusInput" type="number" inputmode="decimal" min="0" step="0.5" value="0">
             </label>
             <label for="leftInnerRadiusInput">
-              左内角弧度（mm）
+              左内角圆角半径（mm）
               <input id="leftInnerRadiusInput" type="number" inputmode="decimal" min="0" step="0.5" value="0">
             </label>
             <label for="rightOuterRadiusInput">
-              右外角弧度（mm）
+              右外角圆角半径（mm）
               <input id="rightOuterRadiusInput" type="number" inputmode="decimal" min="0" step="0.5" value="0">
             </label>
             <label for="rightInnerRadiusInput">
-              右内角弧度（mm）
+              右内角圆角半径（mm）
               <input id="rightInnerRadiusInput" type="number" inputmode="decimal" min="0" step="0.5" value="0">
             </label>
           </div>
@@ -620,13 +685,18 @@
               离顶距离（mm）
               <input id="topGapInput" type="number" inputmode="decimal" min="0" step="0.5" value="5">
             </label>
+            <label for="clearanceInput">
+              安装间隙（mm）
+              <input id="clearanceInput" type="number" inputmode="decimal" min="0" step="0.1" value="0">
+            </label>
           </div>
         </fieldset>
 
         <div class="actions">
           <button class="primary" id="validateBtn" type="button">验证</button>
           <button id="resetBtn" type="button">重置</button>
-          <button id="replayBtn" class="span-2" type="button" disabled>重播动画</button>
+          <button id="replayBtn" type="button" disabled>重播动画</button>
+          <button id="copyBtn" type="button" disabled>复制结果</button>
         </div>
 
         <div id="result" class="result wait" aria-live="polite">
@@ -641,7 +711,7 @@
           </div>
           <div class="metric">
             <span>当前物体</span>
-            <b id="partMetric">200 x 40 · 顶5</b>
+            <b id="partMetric">200 x 40 · 顶5 · 隙0</b>
           </div>
           <div class="metric">
             <span>顶部 / 开口</span>
@@ -661,158 +731,743 @@
           </div>
         </div>
 
-        <p class="note">说明：此文件不依赖网络和外部库，可直接复制到任意设备离线打开。计算为二维采样近似，实际加工仍建议按真实公差用 CAD 复核。</p>
+        <p class="note">说明：本页为单文件，不依赖网络和外部库，可离线打开。安装间隙会收紧碰撞边界；离顶距离表示最终上表面到顶壁的空隙，须 ≥ 安装间隙。计算为二维采样近似（v1.1）；实际加工请按真实公差用 CAD 复核。v2 将扩展三维模式，求解接口已预留。</p>
       </aside>
     </section>
   </main>
 
-  <script>
-    const DEFAULTS = {
-      topWidth: 212,
-      entryWidth: 192,
-      leftInset: 0,
-      rightInset: 20,
-      leftHeight: 50,
-      rightHeight: 50,
-      leftOuterRadius: 0,
-      leftInnerRadius: 0,
-      rightOuterRadius: 0,
-      rightInnerRadius: 0,
-      partLength: 200,
-      partHeight: 40,
-      topGap: 5
+  <script id="eisv-core">
+/**
+ * EISV pure core — no DOM.
+ * Pose2D: { x, y, deg }
+ * Loaded on main thread and inside Blob Worker.
+ */
+(function (global) {
+  "use strict";
+
+  const meta = {
+    version: "1.1",
+    mode: "2d",
+    modesAvailable: ["2d"]
+  };
+
+  const DEFAULTS = {
+    topWidth: 212,
+    entryWidth: 192,
+    leftInset: 0,
+    rightInset: 20,
+    leftHeight: 50,
+    rightHeight: 50,
+    leftOuterRadius: 0,
+    leftInnerRadius: 0,
+    rightOuterRadius: 0,
+    rightInnerRadius: 0,
+    partLength: 200,
+    partHeight: 40,
+    topGap: 5,
+    clearance: 0
+  };
+
+  function formatNumber(value) {
+    return Number(Number(value).toFixed(1)).toString();
+  }
+
+  function formatInputValue(value) {
+    if (!Number.isFinite(value)) return "";
+    return Number(value.toFixed(3)).toString();
+  }
+
+  /** Sanitize values for drawing only — per-field fallback, never wholesale DEFAULTS. */
+  function valuesForDraw(values) {
+    const d = DEFAULTS;
+    function pos(v, def) {
+      if (!Number.isFinite(v) || v <= 0) return def;
+      return Math.min(v, 800);
+    }
+    function nonNeg(v, def) {
+      if (!Number.isFinite(v) || v < 0) return def;
+      return Math.min(v, 800);
+    }
+    const topWidth = pos(values.topWidth, d.topWidth);
+    const leftInset = nonNeg(values.leftInset, d.leftInset);
+    const rightInset = nonNeg(values.rightInset, d.rightInset);
+    let entryWidth = pos(values.entryWidth, d.entryWidth);
+    if (leftInset + rightInset < topWidth) {
+      entryWidth = topWidth - leftInset - rightInset;
+    } else {
+      entryWidth = Math.max(1, topWidth * 0.5);
+    }
+    return {
+      topWidth,
+      entryWidth,
+      leftInset: Math.min(leftInset, topWidth * 0.45),
+      rightInset: Math.min(rightInset, topWidth * 0.45),
+      leftHeight: pos(values.leftHeight, d.leftHeight),
+      rightHeight: pos(values.rightHeight, d.rightHeight),
+      leftOuterRadius: nonNeg(values.leftOuterRadius, 0),
+      leftInnerRadius: nonNeg(values.leftInnerRadius, 0),
+      rightOuterRadius: nonNeg(values.rightOuterRadius, 0),
+      rightInnerRadius: nonNeg(values.rightInnerRadius, 0),
+      partLength: pos(values.partLength, d.partLength),
+      partHeight: pos(values.partHeight, d.partHeight),
+      topGap: nonNeg(values.topGap, d.topGap),
+      clearance: nonNeg(values.clearance, 0)
     };
+  }
 
-    const inputs = {
-      topWidth: document.getElementById("topWidthInput"),
-      entryWidth: document.getElementById("entryWidthInput"),
-      leftInset: document.getElementById("leftInsetInput"),
-      rightInset: document.getElementById("rightInsetInput"),
-      leftHeight: document.getElementById("leftHeightInput"),
-      rightHeight: document.getElementById("rightHeightInput"),
-      leftOuterRadius: document.getElementById("leftOuterRadiusInput"),
-      leftInnerRadius: document.getElementById("leftInnerRadiusInput"),
-      rightOuterRadius: document.getElementById("rightOuterRadiusInput"),
-      rightInnerRadius: document.getElementById("rightInnerRadiusInput"),
-      partLength: document.getElementById("partLengthInput"),
-      partHeight: document.getElementById("partHeightInput"),
-      topGap: document.getElementById("topGapInput")
+  function validateValues(values) {
+    const names = [
+      ["顶部净宽", values.topWidth],
+      ["下方开口", values.entryWidth],
+      ["左侧空腔高度", values.leftHeight],
+      ["右侧空腔高度", values.rightHeight],
+      ["矩形长度", values.partLength],
+      ["矩形高度", values.partHeight]
+    ];
+    for (const [label, value] of names) {
+      if (!Number.isFinite(value) || value <= 0) return `${label}必须大于 0。`;
+    }
+    const nonNegativeNames = [
+      ["左侧退进", values.leftInset],
+      ["右侧退进", values.rightInset],
+      ["左外角圆角半径", values.leftOuterRadius],
+      ["左内角圆角半径", values.leftInnerRadius],
+      ["右外角圆角半径", values.rightOuterRadius],
+      ["右内角圆角半径", values.rightInnerRadius],
+      ["离顶距离", values.topGap],
+      ["安装间隙", values.clearance]
+    ];
+    for (const [label, value] of nonNegativeNames) {
+      if (!Number.isFinite(value) || value < 0) return `${label}不能小于 0。`;
+    }
+    if (values.leftInset + values.rightInset >= values.topWidth) {
+      return "左右退进之和必须小于顶部净宽。";
+    }
+    if (values.leftOuterRadius + values.leftInnerRadius > values.leftInset) {
+      return "左内外圆角半径之和不能大于左侧退进。";
+    }
+    if (values.rightOuterRadius + values.rightInnerRadius > values.rightInset) {
+      return "右内外圆角半径之和不能大于右侧退进。";
+    }
+    if (values.leftOuterRadius > values.leftHeight) {
+      return "左外角圆角半径不能大于左侧空腔高度。";
+    }
+    if (values.rightOuterRadius > values.rightHeight) {
+      return "右外角圆角半径不能大于右侧空腔高度。";
+    }
+    if (Math.abs(values.entryWidth - (values.topWidth - values.leftInset - values.rightInset)) > 0.01) {
+      return "下方开口应等于顶部净宽减左侧退进和右侧退进。";
+    }
+    const cavityMaxH = Math.max(values.leftHeight, values.rightHeight);
+    if (values.partHeight > cavityMaxH) {
+      return "矩形高度大于空腔最大高度，无法放入。";
+    }
+    if (values.topGap + values.partHeight > cavityMaxH + 0.001) {
+      return "矩形高度与离顶距离之和超过空腔高度，无法水平放到顶部。";
+    }
+    // 最终贴顶区：零件上表面在 y=topGap，安装间隙要求离实体壁 ≥ clearance
+    // 故离顶距离必须 ≥ 安装间隙，否则顶侧间隙与离顶设定互相干涉（并非「越过」顶壁）
+    if (values.clearance > 0 && values.topGap + 0.001 < values.clearance) {
+      return "离顶距离与安装间隙互相干涉：最终位姿下零件上表面到顶壁的空隙为离顶距离，须不小于安装间隙。请增大离顶距离，或减小安装间隙（贴顶且要求间隙时二者不能同时满足）。";
+    }
+    if (Object.values(values).some((value) => Number.isFinite(value) && value > 800)) {
+      return "单项尺寸建议不超过 800mm；此工具为浏览器内近似验证。";
+    }
+    return "";
+  }
+
+  /** Pure linked-field update. Returns patch object for changed dependents. */
+  function linkedInputPatch(values, changedKey) {
+    const topWidth = values.topWidth;
+    if (!Number.isFinite(topWidth)) return {};
+    if (changedKey === "entryWidth") {
+      const entryWidth = values.entryWidth;
+      const leftInset = values.leftInset;
+      if (Number.isFinite(entryWidth)) {
+        return {
+          rightInset: topWidth - (Number.isFinite(leftInset) ? leftInset : 0) - entryWidth
+        };
+      }
+      return {};
+    }
+    if (changedKey === "leftInset" || changedKey === "rightInset" || changedKey === "topWidth") {
+      const leftInset = values.leftInset;
+      const rightInset = values.rightInset;
+      if (Number.isFinite(rightInset)) {
+        return {
+          entryWidth: topWidth - (Number.isFinite(leftInset) ? leftInset : 0) - rightInset
+        };
+      }
+    }
+    return {};
+  }
+
+  function deriveGeom(values) {
+    const entryLeft = values.leftInset;
+    const entryRight = values.topWidth - values.rightInset;
+    const entryWidth = entryRight - entryLeft;
+    const cavityHeight = Math.max(values.leftHeight, values.rightHeight);
+    const yMax = cavityHeight + Math.max((values.topGap + values.partHeight) * 3, values.topWidth * 0.55, 90);
+    const maxDim = Math.max(
+      values.topWidth,
+      values.entryWidth,
+      values.leftHeight,
+      values.rightHeight,
+      values.partLength,
+      values.partHeight,
+      values.topGap,
+      yMax
+    );
+    const grid = Math.max(1, Math.ceil(maxDim / 320));
+    return {
+      topWidth: values.topWidth,
+      entryLeft,
+      entryRight,
+      entryWidth,
+      leftInset: values.leftInset,
+      rightInset: values.rightInset,
+      leftHeight: values.leftHeight,
+      rightHeight: values.rightHeight,
+      leftOuterRadius: values.leftOuterRadius,
+      leftInnerRadius: values.leftInnerRadius,
+      rightOuterRadius: values.rightOuterRadius,
+      rightInnerRadius: values.rightInnerRadius,
+      cavityHeight,
+      partLength: values.partLength,
+      partHeight: values.partHeight,
+      topGap: values.topGap,
+      stepWidth: values.rightInset,
+      yMax,
+      grid,
+      angleStep: grid > 1 ? 2 : 1,
+      minAngle: -88,
+      maxAngle: 88
     };
+  }
 
-    const result = document.getElementById("result");
-    const resultTitle = document.getElementById("resultTitle");
-    const resultCopy = document.getElementById("resultCopy");
-    const maxLengthEl = document.getElementById("maxLength");
-    const partMetric = document.getElementById("partMetric");
-    const widthMetric = document.getElementById("widthMetric");
-    const heightMetric = document.getElementById("heightMetric");
-    const insetMetric = document.getElementById("insetMetric");
-    const radiusMetric = document.getElementById("radiusMetric");
-    const validateBtn = document.getElementById("validateBtn");
-    const resetBtn = document.getElementById("resetBtn");
-    const replayBtn = document.getElementById("replayBtn");
+  function buildCavityPaths(geom) {
+    const lo = geom.leftOuterRadius;
+    const li = geom.leftInnerRadius;
+    const ro = geom.rightOuterRadius;
+    const ri = geom.rightInnerRadius;
 
-    const diagram = document.getElementById("diagram");
-    const wallPath = document.getElementById("wallPath");
-    const cavityFill = document.getElementById("cavityFill");
-    const cavityWall = document.getElementById("cavityWall");
-    const openingLine = document.getElementById("openingLine");
-    const travelPath = document.getElementById("travelPath");
-    const turnDots = document.getElementById("turnDots");
-    const ghost = document.getElementById("ghost");
-    const part = document.getElementById("part");
-    const partFill = document.getElementById("partFill");
-    const partRect = document.getElementById("partRect");
-    const partText = document.getElementById("partText");
+    const rightOuter = ro > 0
+      ? `V ${geom.rightHeight - ro} A ${ro} ${ro} 0 0 1 ${geom.topWidth - ro} ${geom.rightHeight}`
+      : `V ${geom.rightHeight}`;
+    const rightInner = ri > 0
+      ? `H ${geom.entryRight + ri} A ${ri} ${ri} 0 0 0 ${geom.entryRight} ${geom.rightHeight + ri}`
+      : `H ${geom.entryRight}`;
+    const leftInner = li > 0
+      ? `V ${geom.leftHeight + li} A ${li} ${li} 0 0 0 ${geom.entryLeft - li} ${geom.leftHeight}`
+      : `V ${geom.leftHeight}`;
+    const leftOuter = lo > 0
+      ? `H ${lo} A ${lo} ${lo} 0 0 1 0 ${geom.leftHeight - lo}`
+      : "H 0";
 
-    const solidLabel = document.getElementById("solidLabel");
-    const topDimText = document.getElementById("topDimText");
-    const entryDimText = document.getElementById("entryDimText");
-    const depthDimText = document.getElementById("depthDimText");
-    const leftHeightDimText = document.getElementById("leftHeightDimText");
-    const stepDimText = document.getElementById("stepDimText");
-    const leftStepDim = document.getElementById("leftStepDim");
-    const leftStepDimText = document.getElementById("leftStepDimText");
+    const fill = `M 0 0 H ${geom.topWidth} ${rightOuter} ${rightInner} V ${geom.yMax} H ${geom.entryLeft} ${leftInner} ${leftOuter} V 0 Z`;
+    const stroke = `M ${geom.entryLeft} ${geom.yMax} ${leftInner} ${leftOuter} V 0 H ${geom.topWidth} ${rightOuter} ${rightInner} V ${geom.yMax}`;
+    const pad = Math.max(24, geom.topWidth * 0.1);
+    const wall = `M ${-pad} ${-pad} H ${geom.topWidth + pad} V ${geom.yMax + pad} H ${-pad} Z ${fill}`;
+    return { fill, stroke, wall, pad };
+  }
 
-    let lastPath = [];
-    let lastCanFit = false;
-    let animationId = null;
-    let activeGeom = null;
+  function xMinAt(geom, y) {
+    if (y < 0) return Infinity;
+    const outer = geom.leftOuterRadius;
+    const inner = geom.leftInnerRadius;
+    if (outer > 0 && y > geom.leftHeight - outer && y <= geom.leftHeight) {
+      const cy = geom.leftHeight - outer;
+      return outer - Math.sqrt(Math.max(0, outer * outer - (y - cy) * (y - cy)));
+    }
+    if (y <= geom.leftHeight) return 0;
+    if (inner > 0 && y <= geom.leftHeight + inner) {
+      const dy = y - geom.leftHeight;
+      return geom.entryLeft - inner + Math.sqrt(Math.max(0, inner * inner - (inner - dy) * (inner - dy)));
+    }
+    return geom.entryLeft;
+  }
 
-    function num(input) {
-      return Number(input.value);
+  function xMaxAt(geom, y) {
+    if (y < 0) return -Infinity;
+    const outer = geom.rightOuterRadius;
+    const inner = geom.rightInnerRadius;
+    if (outer > 0 && y > geom.rightHeight - outer && y <= geom.rightHeight) {
+      const cy = geom.rightHeight - outer;
+      return geom.topWidth - outer + Math.sqrt(Math.max(0, outer * outer - (y - cy) * (y - cy)));
+    }
+    if (y <= geom.rightHeight) return geom.topWidth;
+    if (inner > 0 && y <= geom.rightHeight + inner) {
+      const dy = y - geom.rightHeight;
+      return geom.entryRight + inner - Math.sqrt(Math.max(0, inner * inner - (inner - dy) * (inner - dy)));
+    }
+    return geom.entryRight;
+  }
+
+  function openingYAt(geom, x) {
+    const clampedX = Math.max(geom.entryLeft, Math.min(geom.entryRight, x));
+    const ratio = geom.entryWidth === 0 ? 0 : (clampedX - geom.entryLeft) / geom.entryWidth;
+    return geom.leftHeight + (geom.rightHeight - geom.leftHeight) * ratio;
+  }
+
+  function edgeSamples(length, height, angleDeg, denser) {
+    const rad = (angleDeg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const halfL = length / 2;
+    const halfH = height / 2;
+    const corners = [
+      [-halfL, -halfH],
+      [halfL, -halfH],
+      [halfL, halfH],
+      [-halfL, halfH]
+    ];
+    const points = [];
+    const base = Math.max(8, Math.ceil(Math.max(length, height) / 8));
+    const perEdge = denser ? base + 4 : base;
+
+    for (let i = 0; i < corners.length; i += 1) {
+      const start = corners[i];
+      const end = corners[(i + 1) % corners.length];
+      for (let step = 0; step <= perEdge; step += 1) {
+        const t = step / perEdge;
+        const localX = start[0] + (end[0] - start[0]) * t;
+        const localY = start[1] + (end[1] - start[1]) * t;
+        points.push([localX * cos - localY * sin, localX * sin + localY * cos]);
+      }
+    }
+    return points;
+  }
+
+  function worldSamples(pose, length, height, denser) {
+    const local = edgeSamples(length, height, pose.deg, denser);
+    return local.map(([lx, ly]) => [pose.x + lx, pose.y + ly]);
+  }
+
+  function createSpace2D(values) {
+    const geom = deriveGeom(values);
+    const partTemplate = { length: values.partLength, height: values.partHeight };
+
+    function angleList() {
+      const list = [];
+      for (let a = geom.minAngle; a <= geom.maxAngle; a += geom.angleStep) list.push(a);
+      return list;
     }
 
-    function readInputs() {
+    function validPose(part, pose, clearance) {
+      const c = clearance || 0;
+      const denser = c > 0;
+      const samples = worldSamples(pose, part.length, part.height, denser);
+      for (const [x, y] of samples) {
+        if (y < -0.001 + c) return false;
+        if (x < xMinAt(geom, y) + c - 0.001 || x > xMaxAt(geom, y) - c + 0.001) return false;
+      }
+      return true;
+    }
+
+    function isEntryPose(part, pose, clearance) {
+      const c = clearance || 0;
+      const samples = worldSamples(pose, part.length, part.height, c > 0);
+      for (const [x, y] of samples) {
+        if (
+          x < geom.entryLeft - 0.001 + c ||
+          x > geom.entryRight + 0.001 - c ||
+          y < openingYAt(geom, x) - 0.001 + c
+        ) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function findFirstHit(part, pose, clearance) {
+      const c = clearance || 0;
+      const samples = worldSamples(pose, part.length, part.height, true);
+      for (const [x, y] of samples) {
+        // 真·穿出顶壁（y<0）；有间隙时 y∈[0,c) 是顶侧间隙不足，不是「越过边界」
+        if (y < -0.001) {
+          return { pose, point: { x, y }, reason: "越过顶部边界" };
+        }
+        if (c > 0 && y < c - 0.001) {
+          return {
+            pose,
+            point: { x, y },
+            reason: "顶侧安装间隙不足（离顶距离须 ≥ 安装间隙）"
+          };
+        }
+        const xmin = xMinAt(geom, y) + c;
+        const xmax = xMaxAt(geom, y) - c;
+        if (x < xmin - 0.001) {
+          return {
+            pose,
+            point: { x, y },
+            reason: c > 0 ? "左侧壁安装间隙不足" : "左侧壁干涉"
+          };
+        }
+        if (x > xmax + 0.001) {
+          return {
+            pose,
+            point: { x, y },
+            reason: c > 0 ? "右侧壁安装间隙不足" : "右侧壁干涉"
+          };
+        }
+      }
+      return null;
+    }
+
+    function finalPlacementPose(part, options) {
+      const topGap = options.topGap != null ? options.topGap : geom.topGap;
+      const openingCenter = geom.entryLeft + geom.entryWidth / 2;
+      const minX = part.length / 2;
+      const maxX = geom.topWidth - part.length / 2;
+      const x = Math.max(minX, Math.min(maxX, openingCenter));
+      return { x, y: topGap + part.height / 2, deg: 0 };
+    }
+
+    function seedFinalCenters(part, options) {
+      const finalPose = finalPlacementPose(part, options);
+      const minX = part.length / 2;
+      const maxX = geom.topWidth - part.length / 2;
+      const centers = [];
+      for (let x = minX; x <= maxX + 0.001; x += geom.grid) centers.push(x);
+      centers.sort((a, b) => Math.abs(a - finalPose.x) - Math.abs(b - finalPose.x));
+      return { finalPose, centers };
+    }
+
+    function searchBounds(gridScale) {
+      const scale = gridScale || 1;
+      const grid = geom.grid * scale;
+      const angles = [];
+      const step = geom.angleStep * (scale > 1 ? 2 : 1);
+      for (let a = geom.minAngle; a <= geom.maxAngle; a += step) angles.push(a);
+      if (!angles.includes(0)) angles.push(0);
+      angles.sort((a, b) => a - b);
+      const gridXCount = Math.round(geom.topWidth / grid) + 1;
+      const gridYCount = Math.round(geom.yMax / grid) + 1;
       return {
-        topWidth: num(inputs.topWidth),
-        entryWidth: num(inputs.entryWidth),
-        leftInset: num(inputs.leftInset),
-        rightInset: num(inputs.rightInset),
-        leftHeight: num(inputs.leftHeight),
-        rightHeight: num(inputs.rightHeight),
-        leftOuterRadius: num(inputs.leftOuterRadius),
-        leftInnerRadius: num(inputs.leftInnerRadius),
-        rightOuterRadius: num(inputs.rightOuterRadius),
-        rightInnerRadius: num(inputs.rightInnerRadius),
-        partLength: num(inputs.partLength),
-        partHeight: num(inputs.partHeight),
-        topGap: num(inputs.topGap)
+        grid,
+        gridXCount,
+        gridYCount,
+        angles,
+        zeroAngleIndex: angles.indexOf(0)
       };
     }
 
-    function validateValues(values) {
-      const names = [
-        ["顶部净宽", values.topWidth],
-        ["下方开口", values.entryWidth],
-        ["左侧空腔高度", values.leftHeight],
-        ["右侧空腔高度", values.rightHeight],
-        ["矩形长度", values.partLength],
-        ["矩形高度", values.partHeight]
+    function failHintPath(part) {
+      const entryCenter = geom.entryLeft + geom.entryWidth / 2;
+      if (part.length > geom.topWidth) {
+        return [
+          { x: entryCenter, y: geom.cavityHeight + part.height * 2.4, deg: -24 },
+          { x: entryCenter, y: geom.cavityHeight + part.height * 1.2, deg: -24 },
+          { x: geom.topWidth / 2, y: part.height / 2, deg: 0 }
+        ];
+      }
+      return [
+        { x: entryCenter, y: geom.cavityHeight + part.height * 2.4, deg: -36 },
+        { x: entryCenter, y: geom.cavityHeight + part.height * 1.5, deg: -36 },
+        { x: entryCenter, y: geom.cavityHeight + part.height * 0.8, deg: -36 }
       ];
-      for (const [label, value] of names) {
-        if (!Number.isFinite(value) || value <= 0) return `${label}必须大于 0。`;
-      }
-      const nonNegativeNames = [
-        ["左侧退进", values.leftInset],
-        ["右侧退进", values.rightInset],
-        ["左外角弧度", values.leftOuterRadius],
-        ["左内角弧度", values.leftInnerRadius],
-        ["右外角弧度", values.rightOuterRadius],
-        ["右内角弧度", values.rightInnerRadius],
-        ["离顶距离", values.topGap]
-      ];
-      for (const [label, value] of nonNegativeNames) {
-        if (!Number.isFinite(value) || value < 0) return `${label}不能小于 0。`;
-      }
-      if (values.leftInset + values.rightInset >= values.topWidth) return "左右退进之和必须小于顶部净宽。";
-      if (values.leftOuterRadius + values.leftInnerRadius > values.leftInset) return "左内外角弧度之和不能大于左侧退进。";
-      if (values.rightOuterRadius + values.rightInnerRadius > values.rightInset) return "右内外角弧度之和不能大于右侧退进。";
-      if (values.leftOuterRadius > values.leftHeight) return "左外角弧度不能大于左侧空腔高度。";
-      if (values.rightOuterRadius > values.rightHeight) return "右外角弧度不能大于右侧空腔高度。";
-      if (values.entryWidth <= 0) return "下方开口必须大于 0。";
-      if (Math.abs(values.entryWidth - (values.topWidth - values.leftInset - values.rightInset)) > 0.01) {
-        return "下方开口应等于顶部净宽减左侧退进和右侧退进。";
-      }
-      if (Object.values(values).some((value) => value > 800)) {
-        return "单项尺寸建议不超过 800mm；此工具为浏览器内近似验证。";
-      }
-      return "";
     }
 
-    function buildGeom(values) {
-      const entryLeft = values.leftInset;
-      const entryRight = values.topWidth - values.rightInset;
-      const entryWidth = entryRight - entryLeft;
-      const cavityHeight = Math.max(values.leftHeight, values.rightHeight);
-      const yMax = cavityHeight + Math.max((values.topGap + values.partHeight) * 3, values.topWidth * 0.55, 90);
-      const maxDim = Math.max(values.topWidth, values.entryWidth, values.leftHeight, values.rightHeight, values.partLength, values.partHeight, values.topGap, yMax);
-      const grid = Math.max(1, Math.ceil(maxDim / 320));
+    return {
+      mode: "2d",
+      geom,
+      partTemplate,
+      paths: buildCavityPaths(geom),
+      validPose,
+      isEntryPose,
+      findFirstHit,
+      finalPlacementPose,
+      seedFinalCenters,
+      searchBounds,
+      failHintPath,
+      xMinAt: (y) => xMinAt(geom, y),
+      xMaxAt: (y) => xMaxAt(geom, y)
+    };
+  }
+
+  function downsamplePath(path) {
+    if (path.length <= 42) return path;
+    const reduced = [];
+    const stride = Math.max(1, Math.floor(path.length / 38));
+    for (let i = 0; i < path.length; i += stride) reduced.push(path[i]);
+    const last = path[path.length - 1];
+    if (reduced[reduced.length - 1] !== last) reduced.push(last);
+    return reduced;
+  }
+
+  /**
+   * Generic BFS path search over a Space interface.
+   * No mode branches — only space methods.
+   */
+  function findPath(space, part, options) {
+    const clearance = options.clearance || 0;
+    const keepParents = Boolean(options.keepPath);
+    const topGap = options.topGap != null ? options.topGap : 0;
+    const geomTop = space.geom ? space.geom.topWidth : Infinity;
+
+    if (part.length > geomTop) {
+      const hint = space.failHintPath(part, options);
+      const hitPose = hint[hint.length - 1] || { x: 0, y: 0, deg: 0 };
       return {
+        ok: false,
+        path: [],
+        firstHit: space.findFirstHit(part, hitPose, clearance) || {
+          pose: hitPose,
+          point: { x: hitPose.x, y: hitPose.y },
+          reason: "长度超过顶部净宽"
+        }
+      };
+    }
+
+    const bounds = space.searchBounds(options.gridScale || 1);
+    const { grid, gridXCount, gridYCount, angles, zeroAngleIndex } = bounds;
+    const nx = gridXCount;
+    const ny = gridYCount;
+    const nCell = nx * ny;
+
+    function stateKey(ix, iy, ia) {
+      return ix + iy * nx + ia * nCell;
+    }
+
+    function poseOf(ix, iy, ia) {
+      return { x: ix * grid, y: iy * grid, deg: angles[ia] };
+    }
+
+    function decodeKey(k) {
+      const ia = Math.floor(k / nCell);
+      const rem = k - ia * nCell;
+      const iy = Math.floor(rem / nx);
+      const ix = rem - iy * nx;
+      return [ix, iy, ia];
+    }
+
+    const queue = [];
+    const seen = new Set();
+    const parent = keepParents ? new Map() : null;
+    const { finalPose, centers } = space.seedFinalCenters(part, { topGap, clearance });
+
+    for (const cx of centers) {
+      const ix = Math.round(cx / grid);
+      const iy = Math.round(finalPose.y / grid);
+      if (ix < 0 || ix >= gridXCount || iy < 0 || iy >= gridYCount) continue;
+      const sk = stateKey(ix, iy, zeroAngleIndex);
+      const p = poseOf(ix, iy, zeroAngleIndex);
+      if (!seen.has(sk) && space.validPose(part, p, clearance)) {
+        seen.add(sk);
+        queue.push(sk);
+        if (parent) parent.set(sk, -1);
+      }
+    }
+
+    const moves = [
+      [1, 0, 0],
+      [-1, 0, 0],
+      [0, 1, 0],
+      [0, -1, 0],
+      [0, 0, 1],
+      [0, 0, -1]
+    ];
+
+    let head = 0;
+    while (head < queue.length) {
+      const sk = queue[head];
+      head += 1;
+      const [ix, iy, ia] = decodeKey(sk);
+      const p = poseOf(ix, iy, ia);
+
+      if (space.isEntryPose(part, p, clearance)) {
+        const found = { ok: true, path: [], firstHit: null };
+        if (parent) {
+          let cursor = sk;
+          while (cursor !== undefined && cursor !== -1) {
+            const parts = decodeKey(cursor);
+            found.path.push(poseOf(parts[0], parts[1], parts[2]));
+            cursor = parent.get(cursor);
+          }
+          const first = found.path[0];
+          const yMax = space.geom.yMax;
+          const extended = {
+            x: first.x,
+            y: Math.min(yMax - part.height / 2, first.y + part.height * 1.2),
+            deg: first.deg
+          };
+          if (space.isEntryPose(part, extended, clearance)) {
+            found.path.unshift(extended);
+          }
+          found.path[found.path.length - 1] = finalPose;
+        }
+        return found;
+      }
+
+      for (const [dx, dy, da] of moves) {
+        const nix = ix + dx;
+        const niy = iy + dy;
+        const nia = ia + da;
+        if (nix < 0 || nix >= gridXCount || niy < 0 || niy >= gridYCount || nia < 0 || nia >= angles.length) {
+          continue;
+        }
+        const nsk = stateKey(nix, niy, nia);
+        if (seen.has(nsk)) continue;
+        const next = poseOf(nix, niy, nia);
+        if (!space.validPose(part, next, clearance)) continue;
+        seen.add(nsk);
+        queue.push(nsk);
+        if (parent) parent.set(nsk, sk);
+      }
+    }
+
+    const hint = space.failHintPath(part, options);
+    let firstHit = null;
+    for (let i = hint.length - 1; i >= 0; i -= 1) {
+      firstHit = space.findFirstHit(part, hint[i], clearance);
+      if (firstHit) break;
+    }
+    if (!firstHit) {
+      firstHit = space.findFirstHit(part, finalPose, clearance);
+    }
+    return { ok: false, path: [], firstHit };
+  }
+
+  function estimateMaxLength(space, height, options) {
+    const clearance = options.clearance || 0;
+    const topGap = options.topGap != null ? options.topGap : space.geom.topGap;
+    const grid = space.geom.grid;
+    let low = 0;
+    let high = space.geom.topWidth;
+    const eps = Math.max(0.05, grid / 2);
+    let guard = 0;
+    while (high - low > eps && guard < 20) {
+      guard += 1;
+      const mid = (low + high) / 2;
+      const part = { length: mid, height };
+      if (findPath(space, part, { clearance, topGap, keepPath: false }).ok) low = mid;
+      else high = mid;
+    }
+    return Math.floor(low * 10) / 10;
+  }
+
+  /**
+   * Optional two-phase: coarse probe then fine path when keepPath.
+   */
+  function findPathWithRefine(space, part, options) {
+    if (!options.keepPath) {
+      return findPath(space, part, options);
+    }
+    const coarse = findPath(space, part, { ...options, keepPath: false, gridScale: 2 });
+    if (!coarse.ok) {
+      return findPath(space, part, { ...options, gridScale: 1 });
+    }
+    return findPath(space, part, { ...options, gridScale: 1 });
+  }
+
+  function solve(request) {
+    const mode = request.mode || "2d";
+    if (mode !== "2d") {
+      return {
+        ok: false,
+        mode,
+        path: [],
+        maxLength: null,
+        error: `模式 ${mode} 尚未实现（v1 仅支持 2d）。`,
+        diagnostics: {
+          grid: 0,
+          angleStep: 0,
+          clearance: 0,
+          margin: null,
+          firstHit: null,
+          warnings: []
+        }
+      };
+    }
+
+    const cavity = request.cavity || {};
+    const partIn = request.part || {};
+    const options = request.options || {};
+    const values = {
+      topWidth: cavity.topWidth,
+      entryWidth: cavity.entryWidth,
+      leftInset: cavity.leftInset,
+      rightInset: cavity.rightInset,
+      leftHeight: cavity.leftHeight,
+      rightHeight: cavity.rightHeight,
+      leftOuterRadius: cavity.leftOuterRadius,
+      leftInnerRadius: cavity.leftInnerRadius,
+      rightOuterRadius: cavity.rightOuterRadius,
+      rightInnerRadius: cavity.rightInnerRadius,
+      partLength: partIn.length,
+      partHeight: partIn.height,
+      topGap: options.topGap != null ? options.topGap : 0,
+      clearance: options.clearance != null ? options.clearance : 0
+    };
+
+    const error = validateValues(values);
+    if (error) {
+      return {
+        ok: false,
+        mode: "2d",
+        path: [],
+        maxLength: null,
+        error,
+        diagnostics: {
+          grid: 0,
+          angleStep: 0,
+          clearance: values.clearance,
+          margin: null,
+          firstHit: null,
+          warnings: []
+        }
+      };
+    }
+
+    const space = createSpace2D(values);
+    const part = { length: values.partLength, height: values.partHeight };
+    const clearance = values.clearance;
+    const topGap = values.topGap;
+
+    let maxLength = null;
+    if (options.estimateMax !== false) {
+      maxLength = estimateMaxLength(space, part.height, { clearance, topGap });
+    }
+
+    const pathResult = options.keepPath
+      ? findPathWithRefine(space, part, { clearance, topGap, keepPath: true })
+      : findPath(space, part, { clearance, topGap, keepPath: false });
+
+    let path = [];
+    if (pathResult.ok) {
+      path = options.keepPath ? downsamplePath(pathResult.path) : pathResult.path;
+    } else if (options.keepPath) {
+      path = space.failHintPath(part, { topGap, clearance });
+    }
+
+    const margin =
+      maxLength != null && pathResult.ok ? Math.round((maxLength - part.length) * 10) / 10 : null;
+
+    return {
+      ok: pathResult.ok,
+      mode: "2d",
+      path,
+      maxLength,
+      error: "",
+      geom: space.geom,
+      paths: space.paths,
+      diagnostics: {
+        grid: space.geom.grid,
+        angleStep: space.geom.angleStep,
+        clearance,
+        margin,
+        firstHit: pathResult.ok ? null : pathResult.firstHit,
+        warnings: []
+      }
+    };
+  }
+
+  function buildSolveRequest(values, options) {
+    return {
+      mode: "2d",
+      cavity: {
         topWidth: values.topWidth,
-        entryLeft,
-        entryRight,
-        entryWidth,
+        entryWidth: values.entryWidth,
         leftInset: values.leftInset,
         rightInset: values.rightInset,
         leftHeight: values.leftHeight,
@@ -820,600 +1475,856 @@
         leftOuterRadius: values.leftOuterRadius,
         leftInnerRadius: values.leftInnerRadius,
         rightOuterRadius: values.rightOuterRadius,
-        rightInnerRadius: values.rightInnerRadius,
-        cavityHeight,
-        partLength: values.partLength,
-        partHeight: values.partHeight,
+        rightInnerRadius: values.rightInnerRadius
+      },
+      part: {
+        length: values.partLength,
+        height: values.partHeight
+      },
+      options: {
+        clearance: values.clearance || 0,
         topGap: values.topGap,
-        stepWidth: values.rightInset,
-        yMax,
-        grid,
-        angleStep: grid > 1 ? 2 : 1,
-        minAngle: -88,
-        maxAngle: 88
+        keepPath: Boolean(options && options.keepPath),
+        estimateMax: options && options.estimateMax === false ? false : true
+      }
+    };
+  }
+
+  const api = {
+    meta,
+    DEFAULTS,
+    formatNumber,
+    formatInputValue,
+    valuesForDraw,
+    validateValues,
+    linkedInputPatch,
+    deriveGeom,
+    buildCavityPaths,
+    createSpace2D,
+    findPath,
+    estimateMaxLength,
+    solve,
+    buildSolveRequest,
+    downsamplePath
+  };
+
+  global.EISV_CORE = api;
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = api;
+  }
+})(typeof self !== "undefined" ? self : globalThis);
+
+  </script>
+  <script>
+/**
+ * EISV view + app — browser only. Depends on global EISV_CORE.
+ */
+(function () {
+  "use strict";
+
+  const C = window.EISV_CORE;
+  if (!C) {
+    console.error("EISV_CORE missing");
+    return;
+  }
+
+  const URL_KEYS = {
+    tw: "topWidth",
+    ew: "entryWidth",
+    li: "leftInset",
+    ri: "rightInset",
+    lh: "leftHeight",
+    rh: "rightHeight",
+    lor: "leftOuterRadius",
+    lir: "leftInnerRadius",
+    ror: "rightOuterRadius",
+    rir: "rightInnerRadius",
+    pl: "partLength",
+    ph: "partHeight",
+    tg: "topGap",
+    cl: "clearance"
+  };
+
+  const inputs = {
+    topWidth: document.getElementById("topWidthInput"),
+    entryWidth: document.getElementById("entryWidthInput"),
+    leftInset: document.getElementById("leftInsetInput"),
+    rightInset: document.getElementById("rightInsetInput"),
+    leftHeight: document.getElementById("leftHeightInput"),
+    rightHeight: document.getElementById("rightHeightInput"),
+    leftOuterRadius: document.getElementById("leftOuterRadiusInput"),
+    leftInnerRadius: document.getElementById("leftInnerRadiusInput"),
+    rightOuterRadius: document.getElementById("rightOuterRadiusInput"),
+    rightInnerRadius: document.getElementById("rightInnerRadiusInput"),
+    partLength: document.getElementById("partLengthInput"),
+    partHeight: document.getElementById("partHeightInput"),
+    topGap: document.getElementById("topGapInput"),
+    clearance: document.getElementById("clearanceInput")
+  };
+
+  const result = document.getElementById("result");
+  const resultTitle = document.getElementById("resultTitle");
+  const resultCopy = document.getElementById("resultCopy");
+  const maxLengthEl = document.getElementById("maxLength");
+  const partMetric = document.getElementById("partMetric");
+  const widthMetric = document.getElementById("widthMetric");
+  const heightMetric = document.getElementById("heightMetric");
+  const insetMetric = document.getElementById("insetMetric");
+  const radiusMetric = document.getElementById("radiusMetric");
+  const validateBtn = document.getElementById("validateBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const replayBtn = document.getElementById("replayBtn");
+  const copyBtn = document.getElementById("copyBtn");
+
+  const diagram = document.getElementById("diagram");
+  const wallPath = document.getElementById("wallPath");
+  const cavityFill = document.getElementById("cavityFill");
+  const cavityWall = document.getElementById("cavityWall");
+  const openingLine = document.getElementById("openingLine");
+  const travelPath = document.getElementById("travelPath");
+  const turnDots = document.getElementById("turnDots");
+  const ghost = document.getElementById("ghost");
+  const part = document.getElementById("part");
+  const partFill = document.getElementById("partFill");
+  const partRect = document.getElementById("partRect");
+  const partText = document.getElementById("partText");
+  const solidLabel = document.getElementById("solidLabel");
+  const hitMarker = document.getElementById("hitMarker");
+  const hitDot = document.getElementById("hitDot");
+  const hitLabel = document.getElementById("hitLabel");
+
+  const dimLines = {};
+  [
+    "topDimHelpLeft", "topDimHelpRight", "topDimLine",
+    "entryDimHelpLeft", "entryDimHelpRight", "entryDimLine",
+    "depthDimHelpTop", "depthDimHelpBottom", "depthDimLine",
+    "leftHeightDimHelpTop", "leftHeightDimHelpBottom", "leftHeightDimLine",
+    "stepDimHelpLeft", "stepDimHelpRight", "stepDimLine",
+    "leftStepDimHelpLeft", "leftStepDimHelpRight", "leftStepDimLine"
+  ].forEach((id) => {
+    dimLines[id] = document.getElementById(id);
+  });
+
+  const topDimText = document.getElementById("topDimText");
+  const entryDimText = document.getElementById("entryDimText");
+  const depthDimText = document.getElementById("depthDimText");
+  const leftHeightDimText = document.getElementById("leftHeightDimText");
+  const stepDimText = document.getElementById("stepDimText");
+  const leftStepDim = document.getElementById("leftStepDim");
+  const leftStepDimText = document.getElementById("leftStepDimText");
+
+  let lastPath = [];
+  let lastCanFit = false;
+  let lastResult = null;
+  let animationId = null;
+  let activeGeom = null;
+  let solveToken = 0;
+  let debounceTimer = null;
+  let worker = null;
+  let workerReady = false;
+  let lastSummary = "";
+
+  function num(input) {
+    return Number(input.value);
+  }
+
+  function readInputs() {
+    return {
+      topWidth: num(inputs.topWidth),
+      entryWidth: num(inputs.entryWidth),
+      leftInset: num(inputs.leftInset),
+      rightInset: num(inputs.rightInset),
+      leftHeight: num(inputs.leftHeight),
+      rightHeight: num(inputs.rightHeight),
+      leftOuterRadius: num(inputs.leftOuterRadius),
+      leftInnerRadius: num(inputs.leftInnerRadius),
+      rightOuterRadius: num(inputs.rightOuterRadius),
+      rightInnerRadius: num(inputs.rightInnerRadius),
+      partLength: num(inputs.partLength),
+      partHeight: num(inputs.partHeight),
+      topGap: num(inputs.topGap),
+      clearance: num(inputs.clearance)
+    };
+  }
+
+  function setLine(id, x1, y1, x2, y2) {
+    const el = dimLines[id];
+    if (!el) return;
+    el.setAttribute("x1", x1);
+    el.setAttribute("y1", y1);
+    el.setAttribute("x2", x2);
+    el.setAttribute("y2", y2);
+  }
+
+  /**
+   * 制图参数（参考 GB/T 4457.4 粗细比、GB/T 4458.4 尺寸注法）
+   * 模型坐标与 mm 同量级；界线与轮廓留间隙，并略超出尺寸线。
+   */
+  function draftParams(geom, pad) {
+    const s = Math.max(0.85, Math.min(1.35, geom.topWidth / 200));
+    return {
+      extGap: 1.8 * s,
+      extOver: 2.2 * s,
+      textGap: 2.4 * s,
+      topOffset: Math.max(11, pad * 0.4),
+      sideOffset: Math.max(10, pad * 0.32),
+      stepOffset: Math.min(16, Math.max(10, pad * 0.36)),
+      hatchPitch: Math.max(3.2, Math.min(6.5, geom.topWidth / 48))
+    };
+  }
+
+  /** 水平尺寸：side "up" 向 y 减小方向（图上方），"down" 向 y 增大方向 */
+  function placeHorizontalDim(opts) {
+    const { x1, x2, y1, y2, dimY, side, helpL, helpR, dimId, textEl, value, p } = opts;
+    const gap = p.extGap;
+    const over = p.extOver;
+    if (side === "up") {
+      setLine(helpL, x1, y1 - gap, x1, dimY - over);
+      setLine(helpR, x2, y2 - gap, x2, dimY - over);
+    } else {
+      setLine(helpL, x1, y1 + gap, x1, dimY + over);
+      setLine(helpR, x2, y2 + gap, x2, dimY + over);
+    }
+    setLine(dimId, x1, dimY, x2, dimY);
+    textEl.setAttribute("x", (x1 + x2) / 2);
+    textEl.setAttribute("y", side === "up" ? dimY - p.textGap : dimY + p.textGap);
+    textEl.setAttribute("text-anchor", "middle");
+    textEl.setAttribute("dominant-baseline", "middle");
+    textEl.textContent = C.formatNumber(value);
+  }
+
+  /** 竖直尺寸：side "left" 向 x 减小，"right" 向 x 增大 */
+  function placeVerticalDim(opts) {
+    const { y1, y2, x1, x2, dimX, side, helpA, helpB, dimId, textEl, value, p } = opts;
+    const gap = p.extGap;
+    const over = p.extOver;
+    if (side === "left") {
+      setLine(helpA, x1 - gap, y1, dimX - over, y1);
+      setLine(helpB, x2 - gap, y2, dimX - over, y2);
+    } else {
+      setLine(helpA, x1 + gap, y1, dimX + over, y1);
+      setLine(helpB, x2 + gap, y2, dimX + over, y2);
+    }
+    setLine(dimId, dimX, y1, dimX, y2);
+    textEl.setAttribute("x", side === "left" ? dimX - p.textGap : dimX + p.textGap);
+    textEl.setAttribute("y", (y1 + y2) / 2);
+    textEl.setAttribute("text-anchor", side === "left" ? "end" : "start");
+    textEl.setAttribute("dominant-baseline", "middle");
+    textEl.textContent = C.formatNumber(value);
+  }
+
+  function updateHatchPitch(pitch) {
+    const pattern = document.getElementById("hatchMetal");
+    const line = document.getElementById("hatchMetalLine");
+    if (!pattern || !line) return;
+    const p = pitch.toFixed(2);
+    pattern.setAttribute("width", p);
+    pattern.setAttribute("height", p);
+    line.setAttribute("y2", p);
+  }
+
+  function setPartPose(pose, blocked) {
+    part.setAttribute("transform", `translate(${pose.x} ${pose.y}) rotate(${pose.deg})`);
+    part.classList.toggle("blocked", Boolean(blocked));
+  }
+
+  function setPartSize(geom, length, height) {
+    // 零件：直角轮廓 + 浅填充（非剖切体，不打剖面线）
+    partFill.setAttribute("x", String(-length / 2));
+    partFill.setAttribute("y", String(-height / 2));
+    partFill.setAttribute("width", String(length));
+    partFill.setAttribute("height", String(height));
+    partRect.setAttribute("x", String(-length / 2));
+    partRect.setAttribute("y", String(-height / 2));
+    partRect.setAttribute("width", String(length));
+    partRect.setAttribute("height", String(height));
+    partText.textContent = `${C.formatNumber(length)}×${C.formatNumber(height)}`;
+    partText.setAttribute("font-size", String(Math.max(8, Math.min(12, Math.min(length, height) * 0.28))));
+    const ghostWidth = Math.min(length, geom.topWidth);
+    const openingCenter = geom.entryLeft + geom.entryWidth / 2;
+    const minX = ghostWidth / 2;
+    const maxX = geom.topWidth - ghostWidth / 2;
+    const ghostX = Math.max(minX, Math.min(maxX, openingCenter)) - ghostWidth / 2;
+    // 最终位姿示意：细虚线假想轮廓，与实体同尺寸
+    ghost.setAttribute("x", String(ghostX));
+    ghost.setAttribute("y", String(geom.topGap));
+    ghost.setAttribute("width", String(ghostWidth));
+    ghost.setAttribute("height", String(height));
+  }
+
+  function drawTravelPath(path) {
+    turnDots.replaceChildren();
+    if (!path.length) {
+      travelPath.setAttribute("d", "");
+      return;
+    }
+    const d = path
+      .map((pose, index) => `${index === 0 ? "M" : "L"} ${pose.x.toFixed(1)} ${pose.y.toFixed(1)}`)
+      .join(" ");
+    travelPath.setAttribute("d", d);
+    const dotRadius = Math.max(1.7, Math.min(3.2, (activeGeom?.topWidth || 200) / 95));
+    const placed = new Set();
+    for (let i = 1; i < path.length; i += 1) {
+      if (Math.abs(path[i].deg - path[i - 1].deg) < 0.1) continue;
+      const key = `${Math.round(path[i].x * 2) / 2},${Math.round(path[i].y * 2) / 2}`;
+      if (placed.has(key)) continue;
+      placed.add(key);
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("class", "turn-dot");
+      dot.setAttribute("cx", path[i].x.toFixed(1));
+      dot.setAttribute("cy", path[i].y.toFixed(1));
+      dot.setAttribute("r", dotRadius.toFixed(1));
+      turnDots.appendChild(dot);
+    }
+  }
+
+  function showHitMarker(firstHit) {
+    if (!hitMarker || !firstHit || !firstHit.point) {
+      if (hitMarker) hitMarker.setAttribute("visibility", "hidden");
+      return;
+    }
+    hitMarker.setAttribute("visibility", "visible");
+    const { x, y } = firstHit.point;
+    hitDot.setAttribute("cx", x.toFixed(1));
+    hitDot.setAttribute("cy", y.toFixed(1));
+    hitLabel.setAttribute("x", (x + 6).toFixed(1));
+    hitLabel.setAttribute("y", (y - 6).toFixed(1));
+    hitLabel.textContent = firstHit.reason || "干涉";
+  }
+
+  function animatePath(path, blockedAtEnd) {
+    cancelAnimationFrame(animationId);
+    if (!path.length) return;
+
+    const duration = Math.max(1700, Math.min(4300, path.length * 58));
+    const delay = 350;
+    const startTime = performance.now() + delay;
+
+    setPartPose(path[0], false);
+    function tick(now) {
+      if (now < startTime) {
+        animationId = requestAnimationFrame(tick);
+        return;
+      }
+      const t = Math.min(1, (now - startTime) / duration);
+      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      const rawIndex = eased * (path.length - 1);
+      const index = Math.floor(rawIndex);
+      const nextIndex = Math.min(path.length - 1, index + 1);
+      const localT = rawIndex - index;
+      const a = path[index];
+      const b = path[nextIndex];
+      const pose = {
+        x: a.x + (b.x - a.x) * localT,
+        y: a.y + (b.y - a.y) * localT,
+        deg: a.deg + (b.deg - a.deg) * localT
       };
+      setPartPose(pose, blockedAtEnd && t >= 0.98);
+      if (t < 1) animationId = requestAnimationFrame(tick);
     }
 
-    function cavityPath(geom) {
-      const lo = geom.leftOuterRadius;
-      const li = geom.leftInnerRadius;
-      const ro = geom.rightOuterRadius;
-      const ri = geom.rightInnerRadius;
-      const rightOuter = ro > 0
-        ? `V ${geom.rightHeight - ro} A ${ro} ${ro} 0 0 1 ${geom.topWidth - ro} ${geom.rightHeight}`
-        : `V ${geom.rightHeight}`;
-      const rightInner = ri > 0
-        ? `H ${geom.entryRight + ri} A ${ri} ${ri} 0 0 0 ${geom.entryRight} ${geom.rightHeight + ri}`
-        : `H ${geom.entryRight}`;
-      const leftInner = li > 0
-        ? `V ${geom.leftHeight + li} A ${li} ${li} 0 0 0 ${geom.entryLeft - li} ${geom.leftHeight}`
-        : `V ${geom.leftHeight}`;
-      const leftOuter = lo > 0
-        ? `H ${lo} A ${lo} ${lo} 0 0 1 0 ${geom.leftHeight - lo}`
-        : "H 0";
-      return `M 0 0 H ${geom.topWidth} ${rightOuter} ${rightInner} V ${geom.yMax} H ${geom.entryLeft} ${leftInner} ${leftOuter} V 0 Z`;
-    }
+    animationId = requestAnimationFrame(tick);
+  }
 
-    function cavityStrokePath(geom) {
-      const lo = geom.leftOuterRadius;
-      const li = geom.leftInnerRadius;
-      const ro = geom.rightOuterRadius;
-      const ri = geom.rightInnerRadius;
-      const leftInner = li > 0
-        ? `V ${geom.leftHeight + li} A ${li} ${li} 0 0 0 ${geom.entryLeft - li} ${geom.leftHeight}`
-        : `V ${geom.leftHeight}`;
-      const leftOuter = lo > 0
-        ? `H ${lo} A ${lo} ${lo} 0 0 1 0 ${geom.leftHeight - lo}`
-        : "H 0";
-      const rightOuter = ro > 0
-        ? `V ${geom.rightHeight - ro} A ${ro} ${ro} 0 0 1 ${geom.topWidth - ro} ${geom.rightHeight}`
-        : `V ${geom.rightHeight}`;
-      const rightInner = ri > 0
-        ? `H ${geom.entryRight + ri} A ${ri} ${ri} 0 0 0 ${geom.entryRight} ${geom.rightHeight + ri}`
-        : `H ${geom.entryRight}`;
-      return `M ${geom.entryLeft} ${geom.yMax} ${leftInner} ${leftOuter} V 0 H ${geom.topWidth} ${rightOuter} ${rightInner} V ${geom.yMax}`;
-    }
+  function setResultState(kind, title, copy) {
+    result.classList.remove("ok", "fail", "wait");
+    result.classList.add(kind);
+    resultTitle.textContent = title;
+    resultCopy.textContent = copy;
+  }
 
-    function wallMaskPath(geom) {
-      const pad = Math.max(24, geom.topWidth * 0.1);
-      return `M ${-pad} ${-pad} H ${geom.topWidth + pad} V ${geom.yMax + pad} H ${-pad} Z ${cavityPath(geom)}`;
-    }
+  function updateMetrics(values, geom) {
+    partMetric.textContent = `${C.formatNumber(values.partLength)} x ${C.formatNumber(values.partHeight)} · 顶${C.formatNumber(values.topGap)} · 隙${C.formatNumber(values.clearance)}`;
+    widthMetric.textContent = `${C.formatNumber(values.topWidth)} / ${C.formatNumber(geom.entryWidth)}`;
+    heightMetric.textContent = `${C.formatNumber(values.leftHeight)} / ${C.formatNumber(values.rightHeight)}`;
+    insetMetric.textContent = `${C.formatNumber(values.leftInset)} / ${C.formatNumber(values.rightInset)}`;
+    radiusMetric.textContent = `外${C.formatNumber(values.leftOuterRadius)}/${C.formatNumber(values.rightOuterRadius)} 内${C.formatNumber(values.leftInnerRadius)}/${C.formatNumber(values.rightInnerRadius)}`;
+  }
 
-    function setLine(id, x1, y1, x2, y2) {
-      const el = document.getElementById(id);
-      el.setAttribute("x1", x1);
-      el.setAttribute("y1", y1);
-      el.setAttribute("x2", x2);
-      el.setAttribute("y2", y2);
-    }
+  function updateDiagram(rawValues) {
+    const drawValues = C.valuesForDraw(rawValues);
+    const geom = C.deriveGeom(drawValues);
+    const paths = C.buildCavityPaths(geom);
+    activeGeom = geom;
+    const pad = Math.max(30, geom.topWidth * 0.14);
+    const p = draftParams(geom, pad);
+    const viewW = geom.topWidth + pad * 2;
+    const viewH = geom.yMax + pad * 2;
+    diagram.setAttribute("viewBox", `${-pad} ${-pad} ${viewW} ${viewH}`);
 
-    function updateDiagram(values) {
-      const error = validateValues(values);
-      const geom = buildGeom(error ? DEFAULTS : values);
-      activeGeom = geom;
-      const pad = Math.max(30, geom.topWidth * 0.14);
-      const viewW = geom.topWidth + pad * 2;
-      const viewH = geom.yMax + pad * 2;
-      diagram.setAttribute("viewBox", `${-pad} ${-pad} ${viewW} ${viewH}`);
+    updateHatchPitch(p.hatchPitch);
 
-      wallPath.setAttribute("d", wallMaskPath(geom));
-      cavityFill.setAttribute("d", cavityPath(geom));
-      cavityWall.setAttribute("d", cavityStrokePath(geom));
-      openingLine.setAttribute("x1", geom.entryLeft);
-      openingLine.setAttribute("y1", geom.leftHeight);
-      openingLine.setAttribute("x2", geom.entryRight);
-      openingLine.setAttribute("y2", geom.rightHeight);
+    wallPath.setAttribute("d", paths.wall);
+    cavityFill.setAttribute("d", paths.fill);
+    cavityWall.setAttribute("d", paths.stroke);
+    openingLine.setAttribute("x1", geom.entryLeft);
+    openingLine.setAttribute("y1", geom.leftHeight);
+    openingLine.setAttribute("x2", geom.entryRight);
+    openingLine.setAttribute("y2", geom.rightHeight);
 
-      const topDimY = -pad * 0.45;
-      setLine("topDimHelpLeft", 0, 0, 0, topDimY);
-      setLine("topDimHelpRight", geom.topWidth, 0, geom.topWidth, topDimY);
-      setLine("topDimLine", 0, topDimY, geom.topWidth, topDimY);
-      topDimText.setAttribute("x", geom.topWidth / 2);
-      topDimText.setAttribute("y", topDimY);
-      topDimText.textContent = `${formatNumber(geom.topWidth)}`;
+    // 顶部净宽 · 水平尺寸（轮廓上方）
+    placeHorizontalDim({
+      x1: 0,
+      x2: geom.topWidth,
+      y1: 0,
+      y2: 0,
+      dimY: -p.topOffset,
+      side: "up",
+      helpL: "topDimHelpLeft",
+      helpR: "topDimHelpRight",
+      dimId: "topDimLine",
+      textEl: topDimText,
+      value: geom.topWidth,
+      p
+    });
 
-      const entryDimY = geom.cavityHeight + pad * 0.32;
-      setLine("entryDimHelpLeft", geom.entryLeft, geom.leftHeight, geom.entryLeft, entryDimY);
-      setLine("entryDimHelpRight", geom.entryRight, geom.rightHeight, geom.entryRight, entryDimY);
-      setLine("entryDimLine", geom.entryLeft, entryDimY, geom.entryRight, entryDimY);
-      entryDimText.setAttribute("x", geom.entryLeft + geom.entryWidth / 2);
-      entryDimText.setAttribute("y", entryDimY);
-      entryDimText.textContent = `${formatNumber(geom.entryWidth)}`;
+    // 下方开口 · 水平尺寸（轮廓下方；左右附着高度可不同）
+    const entryDimY = geom.cavityHeight + p.stepOffset + 4;
+    placeHorizontalDim({
+      x1: geom.entryLeft,
+      x2: geom.entryRight,
+      y1: geom.leftHeight,
+      y2: geom.rightHeight,
+      dimY: entryDimY,
+      side: "down",
+      helpL: "entryDimHelpLeft",
+      helpR: "entryDimHelpRight",
+      dimId: "entryDimLine",
+      textEl: entryDimText,
+      value: geom.entryWidth,
+      p
+    });
 
-      const depthDimX = geom.topWidth + pad * 0.35;
-      setLine("depthDimHelpTop", geom.topWidth, 0, depthDimX, 0);
-      setLine("depthDimHelpBottom", geom.entryRight, geom.rightHeight, depthDimX, geom.rightHeight);
-      setLine("depthDimLine", depthDimX, 0, depthDimX, geom.rightHeight);
-      depthDimText.setAttribute("x", depthDimX + 4);
-      depthDimText.setAttribute("y", geom.rightHeight / 2);
-      depthDimText.textContent = `${formatNumber(geom.rightHeight)}`;
+    // 右侧空腔高度 · 竖直尺寸
+    placeVerticalDim({
+      y1: 0,
+      y2: geom.rightHeight,
+      x1: geom.topWidth,
+      x2: geom.entryRight,
+      dimX: geom.topWidth + p.sideOffset,
+      side: "right",
+      helpA: "depthDimHelpTop",
+      helpB: "depthDimHelpBottom",
+      dimId: "depthDimLine",
+      textEl: depthDimText,
+      value: geom.rightHeight,
+      p
+    });
 
-      const leftDimX = -pad * 0.26;
-      setLine("leftHeightDimHelpTop", 0, 0, leftDimX, 0);
-      setLine("leftHeightDimHelpBottom", 0, geom.leftHeight, leftDimX, geom.leftHeight);
-      setLine("leftHeightDimLine", leftDimX, 0, leftDimX, geom.leftHeight);
-      leftHeightDimText.setAttribute("x", leftDimX - 4);
-      leftHeightDimText.setAttribute("y", geom.leftHeight / 2);
-      leftHeightDimText.textContent = `${formatNumber(geom.leftHeight)}`;
+    // 左侧空腔高度 · 竖直尺寸
+    placeVerticalDim({
+      y1: 0,
+      y2: geom.leftHeight,
+      x1: 0,
+      x2: 0,
+      dimX: -p.sideOffset,
+      side: "left",
+      helpA: "leftHeightDimHelpTop",
+      helpB: "leftHeightDimHelpBottom",
+      dimId: "leftHeightDimLine",
+      textEl: leftHeightDimText,
+      value: geom.leftHeight,
+      p
+    });
 
-      const stepDimY = geom.rightHeight + Math.min(18, pad * 0.42);
-      setLine("stepDimHelpLeft", geom.entryRight, geom.rightHeight, geom.entryRight, stepDimY);
-      setLine("stepDimHelpRight", geom.topWidth, geom.rightHeight, geom.topWidth, stepDimY);
-      setLine("stepDimLine", geom.entryRight, stepDimY, geom.topWidth, stepDimY);
-      stepDimText.setAttribute("x", geom.entryRight + geom.stepWidth / 2);
-      stepDimText.setAttribute("y", stepDimY);
-      stepDimText.textContent = `${formatNumber(geom.stepWidth)}`;
-      leftStepDim.style.display = geom.leftInset > 0.001 ? "" : "none";
-      if (geom.leftInset > 0.001) {
-        const leftStepDimY = geom.leftHeight + Math.min(18, pad * 0.42);
-        setLine("leftStepDimHelpLeft", 0, geom.leftHeight, 0, leftStepDimY);
-        setLine("leftStepDimHelpRight", geom.entryLeft, geom.leftHeight, geom.entryLeft, leftStepDimY);
-        setLine("leftStepDimLine", 0, leftStepDimY, geom.entryLeft, leftStepDimY);
-        leftStepDimText.setAttribute("x", geom.entryLeft / 2);
-        leftStepDimText.setAttribute("y", leftStepDimY);
-        leftStepDimText.textContent = `${formatNumber(geom.leftInset)}`;
-      }
-      solidLabel.textContent = "实体";
-      solidLabel.setAttribute("x", geom.topWidth + pad / 2);
-      solidLabel.setAttribute("y", geom.cavityHeight + Math.max(30, geom.yMax * 0.22));
-      solidLabel.setAttribute("text-anchor", "middle");
-      solidLabel.setAttribute("dominant-baseline", "middle");
+    // 右侧退进
+    const stepDimY = geom.rightHeight + p.stepOffset;
+    placeHorizontalDim({
+      x1: geom.entryRight,
+      x2: geom.topWidth,
+      y1: geom.rightHeight,
+      y2: geom.rightHeight,
+      dimY: stepDimY,
+      side: "down",
+      helpL: "stepDimHelpLeft",
+      helpR: "stepDimHelpRight",
+      dimId: "stepDimLine",
+      textEl: stepDimText,
+      value: geom.stepWidth,
+      p
+    });
 
-      setPartSize(geom, values.partLength, values.partHeight);
-      setPartPose({ cx: geom.entryLeft + Math.min(geom.entryWidth / 2, values.partLength / 2), cy: geom.cavityHeight + values.partHeight * 2.5, deg: -28 }, false);
-      drawTravelPath([]);
-
-      partMetric.textContent = `${formatNumber(values.partLength)} x ${formatNumber(values.partHeight)} · 顶${formatNumber(values.topGap)}`;
-      widthMetric.textContent = `${formatNumber(values.topWidth)} / ${formatNumber(geom.entryWidth)}`;
-      heightMetric.textContent = `${formatNumber(values.leftHeight)} / ${formatNumber(values.rightHeight)}`;
-      insetMetric.textContent = `${formatNumber(values.leftInset)} / ${formatNumber(values.rightInset)}`;
-      radiusMetric.textContent = `外${formatNumber(values.leftOuterRadius)}/${formatNumber(values.rightOuterRadius)} 内${formatNumber(values.leftInnerRadius)}/${formatNumber(values.rightInnerRadius)}`;
-    }
-
-    function formatNumber(value) {
-      return Number(value.toFixed(1)).toString();
-    }
-
-    function formatInputValue(value) {
-      if (!Number.isFinite(value)) return "";
-      return Number(value.toFixed(3)).toString();
-    }
-
-    function syncLinkedInputs(changedKey) {
-      const topWidth = num(inputs.topWidth);
-      if (!Number.isFinite(topWidth)) return;
-
-      if (changedKey === "entryWidth") {
-        const entryWidth = num(inputs.entryWidth);
-        const leftInset = num(inputs.leftInset);
-        if (Number.isFinite(entryWidth)) {
-          inputs.rightInset.value = formatInputValue(topWidth - (Number.isFinite(leftInset) ? leftInset : 0) - entryWidth);
-        }
-        return;
-      }
-
-      if (changedKey === "leftInset" || changedKey === "rightInset" || changedKey === "topWidth") {
-        const leftInset = num(inputs.leftInset);
-        const rightInset = num(inputs.rightInset);
-        if (Number.isFinite(rightInset)) {
-          inputs.entryWidth.value = formatInputValue(topWidth - (Number.isFinite(leftInset) ? leftInset : 0) - rightInset);
-        }
-      }
-    }
-
-    function xMinAt(geom, y) {
-      if (y < 0) return Infinity;
-      const outer = geom.leftOuterRadius;
-      const inner = geom.leftInnerRadius;
-      if (outer > 0 && y > geom.leftHeight - outer && y <= geom.leftHeight) {
-        const cy = geom.leftHeight - outer;
-        return outer - Math.sqrt(Math.max(0, outer * outer - (y - cy) * (y - cy)));
-      }
-      if (y <= geom.leftHeight) return 0;
-      if (inner > 0 && y <= geom.leftHeight + inner) {
-        const dy = y - geom.leftHeight;
-        return geom.entryLeft - inner + Math.sqrt(Math.max(0, inner * inner - (inner - dy) * (inner - dy)));
-      }
-      return geom.entryLeft;
-    }
-
-    function xMaxAt(geom, y) {
-      if (y < 0) return -Infinity;
-      const outer = geom.rightOuterRadius;
-      const inner = geom.rightInnerRadius;
-      if (outer > 0 && y > geom.rightHeight - outer && y <= geom.rightHeight) {
-        const cy = geom.rightHeight - outer;
-        return geom.topWidth - outer + Math.sqrt(Math.max(0, outer * outer - (y - cy) * (y - cy)));
-      }
-      if (y <= geom.rightHeight) return geom.topWidth;
-      if (inner > 0 && y <= geom.rightHeight + inner) {
-        const dy = y - geom.rightHeight;
-        return geom.entryRight + inner - Math.sqrt(Math.max(0, inner * inner - (inner - dy) * (inner - dy)));
-      }
-      return geom.entryRight;
-    }
-
-    function openingYAt(geom, x) {
-      const clampedX = Math.max(geom.entryLeft, Math.min(geom.entryRight, x));
-      const ratio = geom.entryWidth === 0 ? 0 : (clampedX - geom.entryLeft) / geom.entryWidth;
-      return geom.leftHeight + (geom.rightHeight - geom.leftHeight) * ratio;
-    }
-
-    function edgeSamples(cx, cy, length, height, angleDeg) {
-      const rad = angleDeg * Math.PI / 180;
-      const cos = Math.cos(rad);
-      const sin = Math.sin(rad);
-      const halfL = length / 2;
-      const halfH = height / 2;
-      const corners = [
-        [-halfL, -halfH],
-        [ halfL, -halfH],
-        [ halfL,  halfH],
-        [-halfL,  halfH]
-      ];
-      const points = [];
-      const perEdge = Math.max(8, Math.ceil(Math.max(length, height) / 8));
-
-      for (let i = 0; i < corners.length; i += 1) {
-        const start = corners[i];
-        const end = corners[(i + 1) % corners.length];
-        for (let step = 0; step <= perEdge; step += 1) {
-          const t = step / perEdge;
-          const localX = start[0] + (end[0] - start[0]) * t;
-          const localY = start[1] + (end[1] - start[1]) * t;
-          points.push([
-            cx + localX * cos - localY * sin,
-            cy + localX * sin + localY * cos
-          ]);
-        }
-      }
-      return points;
-    }
-
-    function validPose(geom, cx, cy, length, height, angleDeg) {
-      const samples = edgeSamples(cx, cy, length, height, angleDeg);
-      for (const [x, y] of samples) {
-        if (y < -0.001) return false;
-        if (x < xMinAt(geom, y) - 0.001 || x > xMaxAt(geom, y) + 0.001) return false;
-      }
-      return true;
-    }
-
-    function isEntryPose(geom, cx, cy, length, height, angleDeg) {
-      const samples = edgeSamples(cx, cy, length, height, angleDeg);
-      for (const [x, y] of samples) {
-        if (x < geom.entryLeft - 0.001 || x > geom.entryRight + 0.001 || y < openingYAt(geom, x) - 0.001) return false;
-      }
-      return true;
-    }
-
-    function angleList(geom) {
-      const list = [];
-      for (let a = geom.minAngle; a <= geom.maxAngle; a += geom.angleStep) list.push(a);
-      return list;
-    }
-
-    function finalPlacementPose(geom, length, height) {
-      const openingCenter = geom.entryLeft + geom.entryWidth / 2;
-      const minCx = length / 2;
-      const maxCx = geom.topWidth - length / 2;
-      const cx = Math.max(minCx, Math.min(maxCx, openingCenter));
-      return {
-        cx,
-        cy: geom.topGap + height / 2,
-        deg: 0
-      };
-    }
-
-    function findPath(geom, length, height, keepParents) {
-      if (length > geom.topWidth) return { ok: false, path: [] };
-
-      const angles = angleList(geom);
-      const zeroAngleIndex = angles.indexOf(0);
-      const gridXCount = Math.round(geom.topWidth / geom.grid) + 1;
-      const gridYCount = Math.round(geom.yMax / geom.grid) + 1;
-      const queue = [];
-      const seen = new Set();
-      const parent = keepParents ? new Map() : null;
-
-      function key(ix, iy, ia) {
-        return `${ix},${iy},${ia}`;
-      }
-
-      function pose(ix, iy, ia) {
-        return {
-          cx: ix * geom.grid,
-          cy: iy * geom.grid,
-          deg: angles[ia]
-        };
-      }
-
-      const finalPose = finalPlacementPose(geom, length, height);
-      const finalY = finalPose.cy;
-      const startMinCx = length / 2;
-      const startMaxCx = geom.topWidth - length / 2;
-      const preferredFinalCx = finalPose.cx;
-      const finalCenters = [];
-      for (let cx = startMinCx; cx <= startMaxCx + 0.001; cx += geom.grid) {
-        finalCenters.push(cx);
-      }
-      finalCenters.sort((a, b) => Math.abs(a - preferredFinalCx) - Math.abs(b - preferredFinalCx));
-      for (const cx of finalCenters) {
-        const ix = Math.round(cx / geom.grid);
-        const iy = Math.round(finalY / geom.grid);
-        const stateKey = key(ix, iy, zeroAngleIndex);
-        const p = pose(ix, iy, zeroAngleIndex);
-        if (!seen.has(stateKey) && validPose(geom, p.cx, p.cy, length, height, p.deg)) {
-          seen.add(stateKey);
-          queue.push([ix, iy, zeroAngleIndex]);
-          if (parent) parent.set(stateKey, null);
-        }
-      }
-
-      const moves = [
-        [1, 0, 0], [-1, 0, 0],
-        [0, 1, 0], [0, -1, 0],
-        [0, 0, 1], [0, 0, -1]
-      ];
-
-      let head = 0;
-      while (head < queue.length) {
-        const [ix, iy, ia] = queue[head];
-        head += 1;
-        const p = pose(ix, iy, ia);
-        if (isEntryPose(geom, p.cx, p.cy, length, height, p.deg)) {
-          const found = { ok: true, path: [] };
-          if (parent) {
-            let cursor = key(ix, iy, ia);
-            while (cursor) {
-              const parts = cursor.split(",").map(Number);
-              found.path.push(pose(parts[0], parts[1], parts[2]));
-              cursor = parent.get(cursor);
-            }
-            const first = found.path[0];
-            const extended = {
-              cx: first.cx,
-              cy: Math.min(geom.yMax - height / 2, first.cy + height * 1.2),
-              deg: first.deg
-            };
-            if (isEntryPose(geom, extended.cx, extended.cy, length, height, extended.deg)) {
-              found.path.unshift(extended);
-            }
-            found.path[found.path.length - 1] = finalPose;
-          }
-          return found;
-        }
-
-        for (const [dx, dy, da] of moves) {
-          const nix = ix + dx;
-          const niy = iy + dy;
-          const nia = ia + da;
-          if (nix < 0 || nix >= gridXCount || niy < 0 || niy >= gridYCount || nia < 0 || nia >= angles.length) {
-            continue;
-          }
-          const stateKey = key(nix, niy, nia);
-          if (seen.has(stateKey)) continue;
-          const next = pose(nix, niy, nia);
-          if (!validPose(geom, next.cx, next.cy, length, height, next.deg)) continue;
-          seen.add(stateKey);
-          queue.push([nix, niy, nia]);
-          if (parent) parent.set(stateKey, key(ix, iy, ia));
-        }
-      }
-
-      return { ok: false, path: [] };
-    }
-
-    function estimateMaxLength(geom, height) {
-      let low = 0;
-      let high = geom.topWidth;
-      for (let i = 0; i < 8; i += 1) {
-        const mid = (low + high) / 2;
-        if (findPath(geom, mid, height, false).ok) low = mid;
-        else high = mid;
-      }
-      return Math.floor(low * 10) / 10;
-    }
-
-    function downsamplePath(path) {
-      if (path.length <= 42) return path;
-      const reduced = [];
-      const stride = Math.max(1, Math.floor(path.length / 38));
-      for (let i = 0; i < path.length; i += stride) reduced.push(path[i]);
-      const last = path[path.length - 1];
-      if (reduced[reduced.length - 1] !== last) reduced.push(last);
-      return reduced;
-    }
-
-    function failPath(geom, length, height) {
-      const entryCenter = geom.entryLeft + geom.entryWidth / 2;
-      if (length > geom.topWidth) {
-        return [
-          { cx: entryCenter, cy: geom.cavityHeight + height * 2.4, deg: -24 },
-          { cx: entryCenter, cy: geom.cavityHeight + height * 1.2, deg: -24 },
-          { cx: geom.topWidth / 2, cy: height / 2, deg: 0 }
-        ];
-      }
-      return [
-        { cx: entryCenter, cy: geom.cavityHeight + height * 2.4, deg: -36 },
-        { cx: entryCenter, cy: geom.cavityHeight + height * 1.5, deg: -36 },
-        { cx: entryCenter, cy: geom.cavityHeight + height * 0.8, deg: -36 }
-      ];
-    }
-
-    function setPartPose(pose, blocked) {
-      part.setAttribute("transform", `translate(${pose.cx} ${pose.cy}) rotate(${pose.deg})`);
-      part.classList.toggle("blocked", Boolean(blocked));
-    }
-
-    function setPartSize(geom, length, height) {
-      const lineGap = displayLineGap(length, height);
-      partFill.setAttribute("x", String(-length / 2));
-      partFill.setAttribute("y", String(-height / 2));
-      partFill.setAttribute("width", String(length));
-      partFill.setAttribute("height", String(height));
-      partRect.setAttribute("x", String(-length / 2 + lineGap));
-      partRect.setAttribute("y", String(-height / 2 + lineGap));
-      partRect.setAttribute("width", String(Math.max(0, length - lineGap * 2)));
-      partRect.setAttribute("height", String(Math.max(0, height - lineGap * 2)));
-      partText.textContent = `${formatNumber(length)} x ${formatNumber(height)}`;
-      partText.setAttribute("font-size", String(Math.max(8, Math.min(13, height * 0.32))));
-      const ghostWidth = Math.min(length, geom.topWidth);
-      const ghostPose = finalPlacementPose(geom, ghostWidth, height);
-      const ghostX = ghostPose.cx - ghostWidth / 2;
-      ghost.setAttribute("x", String(ghostX + lineGap));
-      ghost.setAttribute("y", String(geom.topGap + lineGap));
-      ghost.setAttribute("width", String(Math.max(0, ghostWidth - lineGap * 2)));
-      ghost.setAttribute("height", String(Math.max(0, height - lineGap * 2)));
-    }
-
-    function displayLineGap(length, height) {
-      return Math.min(2.6, Math.max(1.4, Math.min(length, height) * 0.08));
-    }
-
-    function drawTravelPath(path) {
-      turnDots.replaceChildren();
-      if (!path.length) {
-        travelPath.setAttribute("d", "");
-        return;
-      }
-      const d = path.map((pose, index) => `${index === 0 ? "M" : "L"} ${pose.cx.toFixed(1)} ${pose.cy.toFixed(1)}`).join(" ");
-      travelPath.setAttribute("d", d);
-      const dotRadius = Math.max(1.7, Math.min(3.2, (activeGeom?.topWidth || 200) / 95));
-      const placed = new Set();
-      for (let i = 1; i < path.length; i += 1) {
-        if (Math.abs(path[i].deg - path[i - 1].deg) < 0.1) continue;
-        const key = `${Math.round(path[i].cx * 2) / 2},${Math.round(path[i].cy * 2) / 2}`;
-        if (placed.has(key)) continue;
-        placed.add(key);
-        const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        dot.setAttribute("class", "turn-dot");
-        dot.setAttribute("cx", path[i].cx.toFixed(1));
-        dot.setAttribute("cy", path[i].cy.toFixed(1));
-        dot.setAttribute("r", dotRadius.toFixed(1));
-        turnDots.appendChild(dot);
-      }
-    }
-
-    function animatePath(path, blockedAtEnd) {
-      cancelAnimationFrame(animationId);
-      if (!path.length) return;
-
-      const duration = Math.max(1700, Math.min(4300, path.length * 58));
-      const delay = 350;
-      const startTime = performance.now() + delay;
-
-      setPartPose(path[0], false);
-      function tick(now) {
-        if (now < startTime) {
-          animationId = requestAnimationFrame(tick);
-          return;
-        }
-        const t = Math.min(1, (now - startTime) / duration);
-        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-        const rawIndex = eased * (path.length - 1);
-        const index = Math.floor(rawIndex);
-        const nextIndex = Math.min(path.length - 1, index + 1);
-        const localT = rawIndex - index;
-        const a = path[index];
-        const b = path[nextIndex];
-        const pose = {
-          cx: a.cx + (b.cx - a.cx) * localT,
-          cy: a.cy + (b.cy - a.cy) * localT,
-          deg: a.deg + (b.deg - a.deg) * localT
-        };
-        setPartPose(pose, blockedAtEnd && t >= 0.98);
-        if (t < 1) animationId = requestAnimationFrame(tick);
-      }
-
-      animationId = requestAnimationFrame(tick);
-    }
-
-    function setResultState(kind, title, copy) {
-      result.classList.remove("ok", "fail", "wait");
-      result.classList.add(kind);
-      resultTitle.textContent = title;
-      resultCopy.textContent = copy;
-    }
-
-    function markPending() {
-      const values = readInputs();
-      updateDiagram(values);
-      setResultState("wait", "待验证", "尺寸已变化，点击验证重新计算。");
-      maxLengthEl.textContent = "--";
-      replayBtn.disabled = true;
-      lastPath = [];
-      lastCanFit = false;
-    }
-
-    function runValidation() {
-      const values = readInputs();
-      const error = validateValues(values);
-      updateDiagram(values);
-      if (error) {
-        setResultState("fail", "尺寸有误", error);
-        maxLengthEl.textContent = "--";
-        replayBtn.disabled = true;
-        return;
-      }
-
-      const geom = buildGeom(values);
-      activeGeom = geom;
-      setResultState("wait", "正在计算", "正在按当前尺寸检查旋转路径。");
-      replayBtn.disabled = true;
-
-      window.setTimeout(() => {
-        const maxLength = estimateMaxLength(geom, values.partHeight);
-        maxLengthEl.textContent = `约 ${maxLength.toFixed(1)} mm`;
-
-        const pathResult = findPath(geom, values.partLength, values.partHeight, true);
-        lastPath = pathResult.ok
-          ? downsamplePath(pathResult.path)
-          : failPath(geom, values.partLength, values.partHeight);
-        drawTravelPath(lastPath);
-        lastCanFit = pathResult.ok;
-        replayBtn.disabled = false;
-
-        if (pathResult.ok) {
-          const critical = Math.abs(values.partLength - maxLength) <= Math.max(0.5, geom.grid);
-          setResultState(
-            "ok",
-            critical ? "接近临界，可放入" : "可放入",
-            `${formatNumber(values.partLength)} x ${formatNumber(values.partHeight)} 可从下方开口旋转进入，并最终以离顶 ${formatNumber(values.topGap)}mm 水平放入顶部空腔。`
-          );
-        } else {
-          setResultState(
-            "fail",
-            "不可放入",
-            `${formatNumber(values.partLength)} x ${formatNumber(values.partHeight)} 在当前收口形状和装入路径下会发生干涉。`
-          );
-        }
-        animatePath(lastPath, !pathResult.ok);
-      }, 20);
-    }
-
-    function resetAll() {
-      for (const [key, value] of Object.entries(DEFAULTS)) {
-        inputs[key].value = String(value);
-      }
-      runValidation();
-    }
-
-    for (const [key, input] of Object.entries(inputs)) {
-      input.addEventListener("input", () => {
-        syncLinkedInputs(key);
-        markPending();
+    leftStepDim.style.display = geom.leftInset > 0.001 ? "" : "none";
+    if (geom.leftInset > 0.001) {
+      const leftStepDimY = geom.leftHeight + p.stepOffset;
+      placeHorizontalDim({
+        x1: 0,
+        x2: geom.entryLeft,
+        y1: geom.leftHeight,
+        y2: geom.leftHeight,
+        dimY: leftStepDimY,
+        side: "down",
+        helpL: "leftStepDimHelpLeft",
+        helpR: "leftStepDimHelpRight",
+        dimId: "leftStepDimLine",
+        textEl: leftStepDimText,
+        value: geom.leftInset,
+        p
       });
     }
 
-    validateBtn.addEventListener("click", runValidation);
-    resetBtn.addEventListener("click", resetAll);
-    replayBtn.addEventListener("click", () => {
-      animatePath(lastPath, !lastCanFit);
+    // 剖面材料标注（非尺寸）
+    solidLabel.textContent = "金属";
+    solidLabel.setAttribute("x", geom.topWidth + pad * 0.55);
+    solidLabel.setAttribute("y", geom.cavityHeight + Math.max(28, geom.yMax * 0.2));
+    solidLabel.setAttribute("text-anchor", "middle");
+    solidLabel.setAttribute("dominant-baseline", "middle");
+
+    setPartSize(geom, drawValues.partLength, drawValues.partHeight);
+    setPartPose(
+      {
+        x: geom.entryLeft + Math.min(geom.entryWidth / 2, drawValues.partLength / 2),
+        y: geom.cavityHeight + drawValues.partHeight * 2.5,
+        deg: -28
+      },
+      false
+    );
+    drawTravelPath([]);
+    showHitMarker(null);
+    updateMetrics(rawValues, geom);
+  }
+
+  function applySolveResult(solveResult, values, opts) {
+    lastResult = solveResult;
+    const animate = opts && opts.animate;
+    const light = opts && opts.light;
+
+    if (solveResult.error) {
+      setResultState("fail", "尺寸有误", solveResult.error);
+      maxLengthEl.textContent = "--";
+      replayBtn.disabled = true;
+      copyBtn.disabled = false;
+      lastPath = [];
+      lastCanFit = false;
+      lastSummary = buildSummary(values, solveResult, "尺寸有误");
+      showHitMarker(null);
+      return;
+    }
+
+    if (solveResult.maxLength != null) {
+      maxLengthEl.textContent = `约 ${solveResult.maxLength.toFixed(1)} mm`;
+    }
+
+    if (light) {
+      if (solveResult.ok) {
+        const margin = solveResult.diagnostics.margin;
+        const marginText = margin != null ? `余量约 ${C.formatNumber(margin)} mm。` : "";
+        setResultState(
+          "wait",
+          "预估可放",
+          `轻量预检通过。最大约 ${solveResult.maxLength != null ? solveResult.maxLength.toFixed(1) : "--"} mm。${marginText}点击验证查看路径动画。`
+        );
+      } else {
+        setResultState(
+          "wait",
+          "预估紧张",
+          "轻量预检未找到路径。点击验证做完整搜索并查看干涉位置。"
+        );
+      }
+      lastSummary = buildSummary(values, solveResult, "预检");
+      copyBtn.disabled = false;
+      return;
+    }
+
+    lastPath = solveResult.path || [];
+    lastCanFit = solveResult.ok;
+    drawTravelPath(lastPath);
+    showHitMarker(solveResult.ok ? null : solveResult.diagnostics.firstHit);
+    replayBtn.disabled = !lastPath.length;
+    copyBtn.disabled = false;
+
+    if (solveResult.ok) {
+      const margin = solveResult.diagnostics.margin;
+      const critical =
+        solveResult.maxLength != null &&
+        Math.abs(values.partLength - solveResult.maxLength) <=
+          Math.max(0.5, solveResult.diagnostics.grid || 1);
+      const marginText =
+        margin != null ? `余量约 ${C.formatNumber(margin)} mm。` : "";
+      setResultState(
+        "ok",
+        critical ? "接近临界，可放入" : "可放入",
+        `${C.formatNumber(values.partLength)} x ${C.formatNumber(values.partHeight)} 可从下方开口旋转进入，最终以离顶 ${C.formatNumber(values.topGap)}mm、间隙 ${C.formatNumber(values.clearance)}mm 水平放入。${marginText}`
+      );
+    } else {
+      const hit = solveResult.diagnostics.firstHit;
+      const hitText = hit ? `示意干涉：${hit.reason}。` : "";
+      setResultState(
+        "fail",
+        "不可放入",
+        `${C.formatNumber(values.partLength)} x ${C.formatNumber(values.partHeight)} 在当前收口形状与装入路径下会发生干涉。${hitText}`
+      );
+    }
+
+    lastSummary = buildSummary(values, solveResult, solveResult.ok ? "可放入" : "不可放入");
+    if (animate) animatePath(lastPath, !solveResult.ok);
+  }
+
+  function buildSummary(values, solveResult, status) {
+    const lines = [
+      `凹位装配模拟验证器 ${C.meta.version}（${C.meta.mode}）`,
+      `状态：${status}`,
+      `顶部净宽/开口：${values.topWidth} / ${values.entryWidth} mm`,
+      `左高/右高：${values.leftHeight} / ${values.rightHeight} mm`,
+      `左退进/右退进：${values.leftInset} / ${values.rightInset} mm`,
+      `矩形：${values.partLength} x ${values.partHeight} mm`,
+      `离顶：${values.topGap} mm；间隙：${values.clearance} mm`
+    ];
+    if (solveResult && solveResult.maxLength != null) {
+      lines.push(`最大可放长度：约 ${solveResult.maxLength} mm`);
+    }
+    if (solveResult && solveResult.diagnostics && solveResult.diagnostics.margin != null) {
+      lines.push(`余量：约 ${solveResult.diagnostics.margin} mm`);
+    }
+    if (solveResult && solveResult.error) lines.push(`说明：${solveResult.error}`);
+    if (solveResult && solveResult.diagnostics && solveResult.diagnostics.firstHit) {
+      lines.push(`干涉：${solveResult.diagnostics.firstHit.reason}`);
+    }
+    return lines.join("\n");
+  }
+
+  function initWorker() {
+    try {
+      const coreEl = document.getElementById("eisv-core");
+      if (!coreEl) return;
+      const workerSource = `${coreEl.textContent}
+self.onmessage = function (e) {
+  var data = e.data || {};
+  try {
+    var result = self.EISV_CORE.solve(data.request);
+    self.postMessage({ token: data.token, ok: true, result: result });
+  } catch (err) {
+    self.postMessage({ token: data.token, ok: false, error: String(err && err.message || err) });
+  }
+};
+`;
+      const blob = new Blob([workerSource], { type: "application/javascript" });
+      const url = URL.createObjectURL(blob);
+      worker = new Worker(url);
+      URL.revokeObjectURL(url);
+      worker.onmessage = function (e) {
+        const data = e.data || {};
+        if (data.token !== solveToken) return;
+        validateBtn.disabled = false;
+        if (!data.ok) {
+          setResultState("fail", "计算失败", data.error || "Worker 异常");
+          return;
+        }
+        const values = readInputs();
+        applySolveResult(data.result, values, { animate: data.animate, light: data.light });
+      };
+      worker.onerror = function () {
+        worker = null;
+        workerReady = false;
+      };
+      workerReady = true;
+    } catch (err) {
+      worker = null;
+      workerReady = false;
+    }
+  }
+
+  function runSolve(options) {
+    const values = readInputs();
+    updateDiagram(values);
+    const request = C.buildSolveRequest(values, {
+      keepPath: Boolean(options.keepPath),
+      estimateMax: options.estimateMax !== false
     });
 
-    updateDiagram(DEFAULTS);
+    const localError = C.validateValues(values);
+    if (localError && !options.light) {
+      applySolveResult(
+        {
+          ok: false,
+          mode: "2d",
+          path: [],
+          maxLength: null,
+          error: localError,
+          diagnostics: {
+            grid: 0,
+            angleStep: 0,
+            clearance: values.clearance,
+            margin: null,
+            firstHit: null,
+            warnings: []
+          }
+        },
+        values,
+        { animate: false }
+      );
+      return;
+    }
+
+    if (!options.light) {
+      setResultState("wait", "正在计算", "正在按当前尺寸检查旋转路径。");
+      validateBtn.disabled = true;
+      replayBtn.disabled = true;
+    }
+
+    const token = ++solveToken;
+    const payload = {
+      token,
+      request,
+      animate: Boolean(options.animate),
+      light: Boolean(options.light)
+    };
+
+    if (workerReady && worker && options.useWorker !== false) {
+      try {
+        worker.postMessage(payload);
+        return;
+      } catch (err) {
+        /* fall through */
+      }
+    }
+
+    window.setTimeout(function () {
+      if (token !== solveToken) return;
+      const result = C.solve(request);
+      validateBtn.disabled = false;
+      applySolveResult(result, values, { animate: options.animate, light: options.light });
+    }, options.light ? 0 : 20);
+  }
+
+  function markPending() {
+    const values = readInputs();
+    updateDiagram(values);
+    setResultState("wait", "待验证", "尺寸已变化，点击验证重新计算。");
+    maxLengthEl.textContent = "--";
+    replayBtn.disabled = true;
+    lastPath = [];
+    lastCanFit = false;
+    lastResult = null;
+    showHitMarker(null);
+  }
+
+  function runValidation() {
+    runSolve({ keepPath: true, estimateMax: true, animate: true, light: false });
+  }
+
+  function scheduleLightSolve() {
+    window.clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(function () {
+      const values = readInputs();
+      if (C.validateValues(values)) return;
+      runSolve({
+        keepPath: false,
+        estimateMax: true,
+        animate: false,
+        light: true,
+        useWorker: true
+      });
+    }, 300);
+  }
+
+  function writeUrlState(values) {
+    try {
+      const params = new URLSearchParams();
+      Object.keys(URL_KEYS).forEach(function (shortKey) {
+        const field = URL_KEYS[shortKey];
+        const v = values[field];
+        if (Number.isFinite(v)) params.set(shortKey, C.formatInputValue(v));
+      });
+      const qs = params.toString();
+      const next = qs ? `${location.pathname}?${qs}${location.hash}` : `${location.pathname}${location.hash}`;
+      history.replaceState(null, "", next);
+    } catch (err) {
+      /* file:// or restricted */
+    }
+  }
+
+  function readUrlState() {
+    try {
+      const params = new URLSearchParams(location.search);
+      const patch = {};
+      let any = false;
+      Object.keys(URL_KEYS).forEach(function (shortKey) {
+        if (!params.has(shortKey)) return;
+        const n = Number(params.get(shortKey));
+        if (Number.isFinite(n)) {
+          patch[URL_KEYS[shortKey]] = n;
+          any = true;
+        }
+      });
+      return any ? patch : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function applyValuesToInputs(values) {
+    Object.keys(inputs).forEach(function (key) {
+      if (values[key] != null && Number.isFinite(values[key])) {
+        inputs[key].value = String(values[key]);
+      }
+    });
+  }
+
+  function resetAll() {
+    applyValuesToInputs(C.DEFAULTS);
+    writeUrlState(C.DEFAULTS);
     runValidation();
+  }
+
+  async function copyResult() {
+    const text = lastSummary || buildSummary(readInputs(), lastResult, resultTitle.textContent);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      const prev = copyBtn.textContent;
+      copyBtn.textContent = "已复制";
+      window.setTimeout(function () {
+        copyBtn.textContent = prev;
+      }, 1200);
+    } catch (err) {
+      setResultState("wait", resultTitle.textContent, "复制失败，请手动选择结果文本。");
+    }
+  }
+
+  function onInput(changedKey) {
+    const values = readInputs();
+    const patch = C.linkedInputPatch(values, changedKey);
+    Object.keys(patch).forEach(function (key) {
+      if (inputs[key]) inputs[key].value = C.formatInputValue(patch[key]);
+    });
+    const next = readInputs();
+    writeUrlState(next);
+    markPending();
+    scheduleLightSolve();
+  }
+
+  Object.keys(inputs).forEach(function (key) {
+    inputs[key].addEventListener("input", function () {
+      onInput(key);
+    });
+  });
+
+  validateBtn.addEventListener("click", runValidation);
+  resetBtn.addEventListener("click", resetAll);
+  replayBtn.addEventListener("click", function () {
+    animatePath(lastPath, !lastCanFit);
+  });
+  copyBtn.addEventListener("click", copyResult);
+
+  initWorker();
+
+  const fromUrl = readUrlState();
+  if (fromUrl) applyValuesToInputs({ ...C.DEFAULTS, ...fromUrl });
+  else applyValuesToInputs(C.DEFAULTS);
+
+  updateDiagram(readInputs());
+  runValidation();
+})();
+
   </script>
 </body>
 </html>
