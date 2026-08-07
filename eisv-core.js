@@ -7,7 +7,7 @@
   "use strict";
 
   const meta = {
-    version: "1.1",
+    version: "1.1.4",
     mode: "2d",
     modesAvailable: ["2d"]
   };
@@ -120,15 +120,21 @@
       return "下方开口应等于顶部净宽减左侧退进和右侧退进。";
     }
     const cavityMaxH = Math.max(values.leftHeight, values.rightHeight);
+    const hasInset = values.leftInset > 0.001 || values.rightInset > 0.001;
     if (values.partHeight > cavityMaxH) {
       return "矩形高度大于空腔最大高度，无法放入。";
     }
-    if (values.topGap + values.partHeight > cavityMaxH + 0.001) {
+    if (hasInset) {
+      // 落在退台上：件高不宜超过较矮一侧退台高度（否则顶面会越过腔顶）
+      const stepMin = Math.min(values.leftHeight, values.rightHeight);
+      if (values.partHeight > stepMin + 0.001) {
+        return "矩形高度大于较矮一侧空腔高度，无法落在退台上。";
+      }
+    } else if (values.topGap + values.partHeight > cavityMaxH + 0.001) {
       return "矩形高度与离顶距离之和超过空腔高度，无法水平放到顶部。";
     }
-    // 最终贴顶区：零件上表面在 y=topGap，安装间隙要求离实体壁 ≥ clearance
-    // 故离顶距离必须 ≥ 安装间隙，否则顶侧间隙与离顶设定互相干涉（并非「越过」顶壁）
-    if (values.clearance > 0 && values.topGap + 0.001 < values.clearance) {
+    // 直壁吸顶：离顶距离须 ≥ 安装间隙。有退台时最终位姿由退台决定，此项不套用用户离顶输入。
+    if (!hasInset && values.clearance > 0 && values.topGap + 0.001 < values.clearance) {
       return "离顶距离与安装间隙互相干涉：最终位姿下零件上表面到顶壁的空隙为离顶距离，须不小于安装间隙。请增大离顶距离，或减小安装间隙（贴顶且要求间隙时二者不能同时满足）。";
     }
     if (Object.values(values).some((value) => Number.isFinite(value) && value > 800)) {
@@ -227,8 +233,9 @@
 
     const fill = `M 0 0 H ${geom.topWidth} ${rightOuter} ${rightInner} V ${geom.yMax} H ${geom.entryLeft} ${leftInner} ${leftOuter} V 0 Z`;
     const stroke = `M ${geom.entryLeft} ${geom.yMax} ${leftInner} ${leftOuter} V 0 H ${geom.topWidth} ${rightOuter} ${rightInner} V ${geom.yMax}`;
-    const pad = Math.max(24, geom.topWidth * 0.1);
-    const wall = `M ${-pad} ${-pad} H ${geom.topWidth + pad} V ${geom.yMax + pad} H ${-pad} Z ${fill}`;
+    // wall 路径保留兼容，UI 已改为腔内 wash、不再画外围实体阴影
+    const pad = Math.max(30, geom.topWidth * 0.14);
+    const wall = "";
     return { fill, stroke, wall, pad };
   }
 
@@ -283,8 +290,10 @@
       [-halfL, halfH]
     ];
     const points = [];
-    const base = Math.max(8, Math.ceil(Math.max(length, height) / 8));
-    const perEdge = denser ? base + 4 : base;
+    const base = denser
+      ? Math.max(16, Math.ceil(Math.max(length, height) / 4))
+      : Math.max(10, Math.ceil(Math.max(length, height) / 8));
+    const perEdge = denser ? base + 8 : base;
 
     for (let i = 0; i < corners.length; i += 1) {
       const start = corners[i];
@@ -300,27 +309,61 @@
   }
 
   function worldSamples(pose, length, height, denser) {
+    const rad = (pose.deg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
     const local = edgeSamples(length, height, pose.deg, denser);
-    return local.map(([lx, ly]) => [pose.x + lx, pose.y + ly]);
+    const points = local.map(([lx, ly]) => [pose.x + lx, pose.y + ly]);
+    if (denser) {
+      const halfL = length / 2;
+      const halfH = height / 2;
+      const nx = 8;
+      const ny = 5;
+      for (let ix = 0; ix <= nx; ix += 1) {
+        for (let iy = 0; iy <= ny; iy += 1) {
+          const lx = -halfL + (length * ix) / nx;
+          const ly = -halfH + (height * iy) / ny;
+          points.push([
+            pose.x + lx * cos - ly * sin,
+            pose.y + lx * sin + ly * cos
+          ]);
+        }
+      }
+    }
+    return points;
   }
 
   function createSpace2D(values) {
     const geom = deriveGeom(values);
     const partTemplate = { length: values.partLength, height: values.partHeight };
 
-    function angleList() {
-      const list = [];
-      for (let a = geom.minAngle; a <= geom.maxAngle; a += geom.angleStep) list.push(a);
-      return list;
+    function pointFree(x, y, c) {
+      if (y < -0.001 + c) return false;
+      if (x < xMinAt(geom, y) + c - 0.001 || x > xMaxAt(geom, y) - c + 0.001) return false;
+      return true;
     }
 
-    function validPose(part, pose, clearance) {
+    function validPose(part, pose, clearance, strict) {
       const c = clearance || 0;
-      const denser = c > 0;
-      const samples = worldSamples(pose, part.length, part.height, denser);
+      const samples = worldSamples(pose, part.length, part.height, Boolean(strict));
       for (const [x, y] of samples) {
-        if (y < -0.001 + c) return false;
-        if (x < xMinAt(geom, y) + c - 0.001 || x > xMaxAt(geom, y) - c + 0.001) return false;
+        if (!pointFree(x, y, c)) return false;
+      }
+      if (!strict) return true;
+      // 最终落位：底边加密 + 退台面下方禁入
+      const rad = (pose.deg * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const halfL = part.length / 2;
+      const halfH = part.height / 2;
+      const n = Math.max(32, Math.ceil(part.length / 2));
+      for (let i = 0; i <= n; i += 1) {
+        const lx = -halfL + (part.length * i) / n;
+        const x = pose.x + lx * cos - halfH * sin;
+        const y = pose.y + lx * sin + halfH * cos;
+        if (x < geom.entryLeft - 0.001 && y > geom.leftHeight + 0.001 + c) return false;
+        if (x > geom.entryRight + 0.001 && y > geom.rightHeight + 0.001 + c) return false;
+        if (!pointFree(x, y, c)) return false;
       }
       return true;
     }
@@ -375,13 +418,180 @@
       return null;
     }
 
+    /**
+     * 最终落位（分层）：
+     * 1 无退台 → top 吸顶对中
+     * 2 等高退台 → step 水平对中
+     * 3 不等高 → bridge：浅侧内角 + 深侧台面；深侧触点扫描，可行域内 |cx−开口中心| 最小
+     * 4 否则 → 较矮一侧 step，仍优先对中（有退台不吸顶）
+     */
     function finalPlacementPose(part, options) {
-      const topGap = options.topGap != null ? options.topGap : geom.topGap;
+      const clearance = options.clearance || 0;
+      const topGapRaw = options.topGap != null ? options.topGap : geom.topGap;
       const openingCenter = geom.entryLeft + geom.entryWidth / 2;
-      const minX = part.length / 2;
-      const maxX = geom.topWidth - part.length / 2;
-      const x = Math.max(minX, Math.min(maxX, openingCenter));
-      return { x, y: topGap + part.height / 2, deg: 0 };
+      const halfL = part.length / 2;
+      const halfH = part.height / 2;
+      const topW = geom.topWidth;
+      const clampX = (x) => Math.max(halfL, Math.min(topW - halfL, x));
+      const lh = geom.leftHeight;
+      const rh = geom.rightHeight;
+      const ax = geom.entryLeft;
+      const bx = geom.entryRight;
+      const L = part.length;
+      const dy = rh - lh;
+
+      function bottomCorners(pose) {
+        const rad = (pose.deg * Math.PI) / 180;
+        const c = Math.cos(rad);
+        const s = Math.sin(rad);
+        return {
+          contactLeft: {
+            x: pose.x - halfL * c - halfH * s,
+            y: pose.y - halfL * s + halfH * c
+          },
+          contactRight: {
+            x: pose.x + halfL * c - halfH * s,
+            y: pose.y + halfL * s + halfH * c
+          }
+        };
+      }
+
+      function poseFromBottomLeft(x1, y1, cos, sin, deg) {
+        return {
+          x: x1 + halfL * cos + halfH * sin,
+          y: y1 + halfL * sin - halfH * cos,
+          deg
+        };
+      }
+
+      function pack(mode, pose, extra) {
+        const ends = bottomCorners(pose);
+        const out = {
+          x: pose.x,
+          y: pose.y,
+          deg: pose.deg,
+          mode,
+          derivedTopGap: Math.max(0, pose.y - halfH * Math.cos((pose.deg * Math.PI) / 180)),
+          contactLeft: ends.contactLeft,
+          contactRight: ends.contactRight
+        };
+        if (extra) {
+          if (extra.supportLeft) out.supportLeft = extra.supportLeft;
+          if (extra.supportRight) out.supportRight = extra.supportRight;
+          if (extra.derivedTopGap != null) out.derivedTopGap = extra.derivedTopGap;
+        }
+        return out;
+      }
+
+      // 1) 直壁
+      if (geom.leftInset <= 0.001 && geom.rightInset <= 0.001) {
+        const gap = Number.isFinite(topGapRaw) ? topGapRaw : 1;
+        return pack("top", { x: clampX(openingCenter), y: gap + halfH, deg: 0 }, { derivedTopGap: gap });
+      }
+
+      // 2) 等高
+      if (Math.abs(dy) < 0.001) {
+        const cx = clampX(openingCenter);
+        return pack("step", { x: cx, y: lh - halfH, deg: 0 }, {
+          derivedTopGap: Math.max(0, lh - part.height),
+          supportLeft: { x: Math.max(0, cx - halfL), y: lh },
+          supportRight: { x: Math.min(topW, cx + halfL), y: rh }
+        });
+      }
+
+      // 3) 不等高 bridge
+      // 浅侧内角 S + 深侧台面点 D；|SD|≤L；多余长只伸向浅侧；在宽松校验下排序，再 strict 确认
+      if (L + 0.001 >= Math.abs(dy)) {
+        const leftShallow = lh <= rh;
+        const S = leftShallow ? { x: ax, y: lh } : { x: bx, y: rh };
+        const deepY = leftShallow ? rh : lh;
+        const deepX0 = leftShallow ? bx : 0;
+        const deepX1 = leftShallow ? topW : ax;
+        const deepW = Math.max(deepX1 - deepX0, 0);
+        const n = Math.min(32, Math.max(16, Math.ceil(deepW) || 16));
+
+        const ranked = [];
+        for (let i = 0; i <= n; i += 1) {
+          const Dx = deepX0 + (deepW * i) / n;
+          const spanX = Dx - S.x;
+          const spanY = deepY - S.y;
+          const d = Math.hypot(spanX, spanY);
+          if (d < Math.abs(dy) - 0.001 || d > L + 0.001) continue;
+
+          const t = L - d;
+          let x1;
+          let y1;
+          let cos;
+          let sin;
+          if (leftShallow) {
+            cos = spanX / d;
+            sin = spanY / d;
+            x1 = S.x - t * cos;
+            y1 = S.y - t * sin;
+            if (x1 < -0.05) continue;
+          } else {
+            cos = (S.x - Dx) / d;
+            sin = (S.y - deepY) / d;
+            x1 = Dx;
+            y1 = deepY;
+            if (x1 + L * cos > topW + 0.05) continue;
+          }
+
+          const deg = (Math.atan2(sin, cos) * 180) / Math.PI;
+          const pose = poseFromBottomLeft(x1, y1, cos, sin, deg);
+          if (!Number.isFinite(pose.x) || !Number.isFinite(pose.y)) continue;
+          if (!validPose(part, pose, clearance, false)) continue;
+          ranked.push({
+            pose,
+            score: Math.abs(pose.x - openingCenter),
+            supportLeft: leftShallow ? S : { x: Dx, y: deepY },
+            supportRight: leftShallow ? { x: Dx, y: deepY } : S
+          });
+        }
+
+        ranked.sort((a, b) => a.score - b.score);
+        const limit = Math.min(8, ranked.length);
+        for (let i = 0; i < limit; i += 1) {
+          const item = ranked[i];
+          if (!validPose(part, item.pose, clearance, true)) continue;
+          return pack("bridge", item.pose, {
+            supportLeft: item.supportLeft,
+            supportRight: item.supportRight
+          });
+        }
+      }
+
+      // 4) 矮台水平，优先开口中心
+      const stepY = Math.min(lh, rh);
+      const cx = clampX(openingCenter);
+      const stepPose = { x: cx, y: stepY - halfH, deg: 0 };
+      if (validPose(part, stepPose, clearance, true)) {
+        return pack("step", stepPose, {
+          derivedTopGap: Math.max(0, stepY - part.height),
+          supportLeft: { x: cx - halfL, y: stepY },
+          supportRight: { x: cx + halfL, y: stepY }
+        });
+      }
+      const xSpan = Math.max(topW - L, 0);
+      let found = null;
+      let foundScore = Infinity;
+      const nStep = 24;
+      for (let i = 0; i <= nStep; i += 1) {
+        const x = halfL + (xSpan * i) / nStep;
+        const trial = { x, y: stepY - halfH, deg: 0 };
+        if (!validPose(part, trial, clearance, true)) continue;
+        const sc = Math.abs(x - openingCenter);
+        if (sc < foundScore) {
+          foundScore = sc;
+          found = trial;
+        }
+      }
+      const pose = found || stepPose;
+      return pack("step", pose, {
+        derivedTopGap: Math.max(0, stepY - part.height),
+        supportLeft: { x: pose.x - halfL, y: stepY },
+        supportRight: { x: pose.x + halfL, y: stepY }
+      });
     }
 
     function seedFinalCenters(part, options) {
@@ -507,16 +717,42 @@
     const parent = keepParents ? new Map() : null;
     const { finalPose, centers } = space.seedFinalCenters(part, { topGap, clearance });
 
+    // 最终姿态可能带倾角（不等高斜担），按最近离散角播种
+    let finalAngleIndex = zeroAngleIndex;
+    let bestAngDist = Infinity;
+    for (let i = 0; i < angles.length; i += 1) {
+      const d = Math.abs(angles[i] - finalPose.deg);
+      if (d < bestAngDist) {
+        bestAngDist = d;
+        finalAngleIndex = i;
+      }
+    }
+
+    function trySeed(ix, iy, ia) {
+      if (ix < 0 || ix >= gridXCount || iy < 0 || iy >= gridYCount) return;
+      if (ia < 0 || ia >= angles.length) return;
+      const sk = stateKey(ix, iy, ia);
+      if (seen.has(sk)) return;
+      const p = poseOf(ix, iy, ia);
+      if (!space.validPose(part, p, clearance)) return;
+      seen.add(sk);
+      queue.push(sk);
+      if (parent) parent.set(sk, -1);
+    }
+
+    // 优先精确最终位姿附近
+    const seedIy = Math.round(finalPose.y / grid);
     for (const cx of centers) {
       const ix = Math.round(cx / grid);
-      const iy = Math.round(finalPose.y / grid);
-      if (ix < 0 || ix >= gridXCount || iy < 0 || iy >= gridYCount) continue;
-      const sk = stateKey(ix, iy, zeroAngleIndex);
-      const p = poseOf(ix, iy, zeroAngleIndex);
-      if (!seen.has(sk) && space.validPose(part, p, clearance)) {
-        seen.add(sk);
-        queue.push(sk);
-        if (parent) parent.set(sk, -1);
+      for (let dy = -1; dy <= 1; dy += 1) {
+        trySeed(ix, seedIy + dy, finalAngleIndex);
+      }
+    }
+    // 兜底：仍尝试水平 0°（直壁/等高）
+    if (finalAngleIndex !== zeroAngleIndex) {
+      for (const cx of centers.slice(0, 8)) {
+        const ix = Math.round(cx / grid);
+        trySeed(ix, seedIy, zeroAngleIndex);
       }
     }
 

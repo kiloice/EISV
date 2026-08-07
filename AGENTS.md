@@ -11,6 +11,7 @@ Static browser app for recessed installation dimension validation (2D profile, v
 | `eisv-app.js` | View + app (DOM, URL, debounce, clipboard, worker). |
 | `scripts/assemble.mjs` | Inlines core + app into `EISV_1.0.html`. |
 | `tests/solve-smoke.mjs` | Node smoke tests for the core. |
+| `docs/placement.md` | Final placement invariants, priorities, and postmortem (read before changing `finalPlacementPose`). |
 | `README.md` | User- and maintainer-facing summary. |
 | `LICENSE` | License text. |
 
@@ -52,6 +53,12 @@ node scripts/assemble.mjs       # rebuild single-file HTML
 Short imperative summaries (e.g. `Fix topGap clearance messaging`).
 
 PRs should include: behavior change summary, manual test notes, screenshots for UI changes, linked issues when relevant.
+
+## Final placement
+
+Before changing seating / bridge / top-gap final pose logic, read **`docs/placement.md`**: fixed priorities, physical invariants, no-`top`-fallback-with-insets, and the postmortem on why multi-seed patches failed.
+
+Smoke tests already lock center-alignment and `mode !== "top"` when insets exist; keep those assertions when editing placement.
 
 ## Agent-Specific Instructions
 

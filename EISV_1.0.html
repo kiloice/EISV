@@ -3,149 +3,168 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="eisv-version" content="1.1">
+  <meta name="eisv-version" content="1.1.4">
   <link rel="icon" href="data:,">
-  <title>凹位装配模拟验证器 v1.1</title>
+  <title>凹位装配模拟验证器 v1.1.4</title>
   <style>
     :root {
-      color-scheme: light;
-      --ink: #eefbff;
-      --muted: #a8d9f4;
-      --line: rgba(125, 221, 255, 0.38);
-      --panel: #05255d;
-      --page: #031a46;
-      --ok: #5cf0a7;
-      --warn: #ff707d;
-      --wait: #ffd166;
-      --accent: #2cc7ff;
-      --part: #ff697f;
-      /* 工程图线（GB/T 4457.4 粗:细 ≈ 2:1，屏幕像素） */
-      --draft-ink: #e8f6ff;
-      --draft-ink-dim: #b7dff5;
-      --draft-thick: 1.8px;
+      color-scheme: dark;
+      /*
+       * 基础蓝 #0271B8（geargenerator 系蓝图纸）
+       * 画布略亮、侧栏/页脚略深，线与字用白/浅蓝白
+       */
+      --blue: #0271B8;
+      --page: #0266a6;
+      --sheet: #0271B8;
+      --panel: #0269ad;
+      --panel-raised: #0478c4;
+      --ink: #f4fbff;
+      --muted: #b5d8f0;
+      --line: rgba(255, 255, 255, 0.26);
+      --line-strong: rgba(255, 255, 255, 0.4);
+      --ok: #7dffb8;
+      --warn: #ff9aa6;
+      --wait: #ffe08a;
+      --accent: #dff4ff;
+      --part: #ff8a96;
+      --draft-ink: #ffffff;
+      --draft-ink-dim: #e3f3ff;
+      --draft-thick: 1.65px;
       --draft-thin: 0.9px;
-      --draft-hatch: rgba(170, 220, 245, 0.72);
-      --space-fill: rgba(6, 28, 72, 0.42);
-      --part-fill: rgba(255, 105, 127, 0.12);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      /* 仅腔内淡白透明层，区分内外（无外围实体阴影） */
+      --cavity-wash: rgba(255, 255, 255, 0.1);
+      --part-fill: rgba(255, 138, 150, 0.14);
+      --controls-w: min(380px, 38vw);
+      font-family: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+        -apple-system, sans-serif;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
-    body {
+    html, body {
       margin: 0;
-      min-height: 100vh;
+      height: 100%;
       color: var(--ink);
       background: var(--page);
     }
 
-    main {
-      width: min(1180px, calc(100vw - 32px));
-      margin: 0 auto;
-      padding: 28px 0 36px;
-    }
-
-    header {
-      display: grid;
-      gap: 8px;
-      margin-bottom: 18px;
-      text-align: center;
-      justify-items: center;
-    }
-
-    h1 {
-      margin: 0;
-      font-size: clamp(24px, 3vw, 36px);
-      line-height: 1.18;
-      letter-spacing: 0;
-      color: #f5fcff;
-      text-shadow: 0 2px 10px rgba(2, 40, 97, 0.42);
-    }
-
-    .version {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      margin: 0;
-      padding: 3px 10px;
-      border: 1px solid rgba(125, 221, 255, 0.35);
-      border-radius: 999px;
-      color: #9fd8f5;
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-      background: rgba(4, 32, 91, 0.55);
-    }
-
-    .lead {
-      max-width: 840px;
-      margin: 0;
-      color: rgba(235, 250, 255, 0.88);
-      font-size: 15px;
-      font-weight: 300;
-      line-height: 1.7;
-    }
-
-    .workspace {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 360px;
-      gap: 18px;
-      align-items: start;
-    }
-
-    .stage,
-    .controls {
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, rgba(7, 60, 142, 0.96) 0%, rgba(3, 32, 88, 0.98) 100%);
-      border-radius: 14px;
-      box-shadow:
-        0 22px 55px rgba(0, 30, 86, 0.26),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-        0 0 24px rgba(57, 213, 255, 0.20);
-    }
-
-    .stage {
+    body {
       overflow: hidden;
     }
 
-    .stage-head {
+    .app {
+      height: 100%;
       display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 14px 16px;
-      border-bottom: 1px solid rgba(125, 221, 255, 0.28);
-      align-items: center;
-      background: rgba(4, 26, 73, 0.46);
+      flex-direction: column;
+      min-height: 0;
     }
 
-    .stage-title {
+    /* —— 顶栏：标题合一，字号贴近栏高、字重适中 —— */
+    .app-header {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px 24px;
+      flex-wrap: wrap;
+      min-height: 44px;
+      padding: 8px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .app-header .brand {
       margin: 0;
-      font-size: 15px;
-      font-weight: 700;
-      color: #f7fcff;
-      text-shadow: 0 1px 8px rgba(44, 199, 255, 0.34);
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      line-height: 1.2;
+      color: #ffffff;
+      white-space: nowrap;
+    }
+
+    .app-header .hint {
+      margin: 0;
+      flex: 1 1 200px;
+      max-width: 48ch;
+      font-size: 11px;
+      font-weight: 400;
+      line-height: 1.45;
+      color: #c5e6fa;
+      text-align: right;
+    }
+
+    /* —— 主工作区：左图纸固定 / 右表单滚动 —— */
+    .workspace {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) var(--controls-w);
+      align-items: stretch;
+    }
+
+    .stage {
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--sheet);
+      border-right: 1px solid var(--line);
     }
 
     .svg-wrap {
-      padding: 14px;
-      background: #061f55;
+      flex: 1 1 auto;
+      min-height: 0;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--sheet);
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+      background-size: 24px 24px;
     }
 
     svg {
       display: block;
       width: 100%;
-      height: auto;
-      min-height: clamp(380px, 48vw, 520px);
+      height: 100%;
+      max-height: 100%;
       touch-action: manipulation;
     }
 
+    /* —— 右侧控制：仅此区纵向滚动 —— */
     .controls {
-      padding: 16px;
-      display: grid;
-      gap: 16px;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 12px;
+      background: var(--panel);
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .panel {
+      flex: 0 0 auto;
+      padding: 12px 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel-raised);
+    }
+
+    .panel-title {
+      margin: 0 0 10px;
+      padding: 0 0 8px 10px;
+      border-left: 3px solid var(--accent);
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      color: #ffffff;
+      line-height: 1.2;
     }
 
     fieldset {
@@ -157,145 +176,105 @@
     }
 
     legend {
-      margin-bottom: 2px;
-      font-size: 14px;
-      font-weight: 800;
-      color: #f7fcff;
-      text-shadow: 0 1px 8px rgba(44, 199, 255, 0.26);
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
     }
 
     .input-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      gap: 10px 8px;
     }
 
     label {
       display: grid;
-      gap: 7px;
-      color: #a9dcf6;
-      font-size: 12px;
-      font-weight: 400;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      line-height: 1.3;
     }
 
     input[type="number"] {
       width: 100%;
-      min-height: 42px;
-      padding: 8px 10px;
-      border: 1px solid rgba(139, 223, 255, 0.54);
-      border-radius: 8px;
-      color: #f7fcff;
-      font-size: 17px;
-      font-weight: 800;
+      min-height: 36px;
+      padding: 6px 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 700;
       font-variant-numeric: tabular-nums;
       outline: none;
-      background: linear-gradient(180deg, rgba(10, 67, 149, 0.88), rgba(5, 41, 112, 0.92));
-      box-shadow:
-        inset 0 0 0 1px rgba(255, 255, 255, 0.06),
-        inset 0 10px 18px rgba(255, 255, 255, 0.04);
+      background: rgba(1, 48, 82, 0.45);
     }
 
     input[type="number"]:focus {
-      border-color: #8ef0ff;
-      box-shadow:
-        0 0 0 3px rgba(44, 199, 255, 0.18),
-        0 0 18px rgba(44, 199, 255, 0.30),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+      border-color: #ffffff;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+      background: rgba(1, 48, 82, 0.58);
     }
 
-    .result {
-      display: grid;
-      gap: 8px;
-      padding: 14px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: rgba(4, 32, 91, 0.72);
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    /* 预设 */
+    .preset-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
     }
 
-    .result strong {
-      font-size: 24px;
-      line-height: 1.15;
+    .preset-btn {
+      min-height: 30px;
+      padding: 4px 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      background: rgba(1, 48, 82, 0.35);
+      color: #e8f5ff;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
     }
 
-    .result.ok strong {
-      color: var(--ok);
+    .preset-btn:hover {
+      border-color: #ffffff;
+      color: #ffffff;
     }
 
-    .result.fail strong {
-      color: var(--warn);
-    }
-
-    .result.wait strong {
-      color: var(--wait);
-    }
-
-    .result p {
-      margin: 0;
-      color: #afdff6;
-      font-size: 13px;
-      font-weight: 300;
-      line-height: 1.6;
-    }
-
-    .metrics {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    .metric {
-      min-width: 0;
-      padding: 12px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: rgba(4, 32, 91, 0.66);
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-    }
-
-    .metric span {
-      display: block;
-      margin-bottom: 6px;
-      color: #a9dcf6;
-      font-size: 12px;
-      font-weight: 300;
-    }
-
-    .metric b {
-      font-size: 18px;
-      font-variant-numeric: tabular-nums;
-      color: #f5fcff;
-      overflow-wrap: anywhere;
+    .preset-btn.is-active {
+      border-color: #ffffff;
+      background: rgba(255, 255, 255, 0.16);
+      color: #ffffff;
     }
 
     .actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      gap: 8px;
     }
 
     button {
-      min-height: 42px;
-      border: 1px solid rgba(139, 223, 255, 0.54);
-      border-radius: 8px;
-      background: linear-gradient(180deg, rgba(8, 57, 134, 0.92), rgba(4, 36, 101, 0.96));
-      color: #f5fcff;
-      font-weight: 800;
+      min-height: 36px;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      background: rgba(1, 48, 82, 0.4);
+      color: #f0f8ff;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
       cursor: pointer;
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
     }
 
     button.primary {
-      border-color: rgba(151, 239, 255, 0.76);
-      color: #fff;
-      background: linear-gradient(180deg, #2cc7ff 0%, #176de3 100%);
-      box-shadow:
-        0 0 18px rgba(44, 199, 255, 0.34),
-        inset 0 1px 0 rgba(255, 255, 255, 0.20);
+      border-color: rgba(255, 255, 255, 0.55);
+      background: linear-gradient(180deg, #0490e0 0%, #0271B8 100%);
+      color: #ffffff;
     }
 
     button:disabled {
-      opacity: 0.55;
+      opacity: 0.45;
       cursor: not-allowed;
     }
 
@@ -303,22 +282,74 @@
       filter: brightness(1.08);
     }
 
-    .span-2 {
-      grid-column: span 2;
+    .result {
+      display: grid;
+      gap: 6px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: rgba(1, 48, 82, 0.35);
+    }
+
+    .result strong {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      line-height: 1.2;
+    }
+
+    .result.ok strong { color: var(--ok); }
+    .result.fail strong { color: var(--warn); }
+    .result.wait strong { color: var(--wait); }
+
+    .result p {
+      margin: 0;
+      color: #c8e6fa;
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 1.55;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: rgba(1, 48, 82, 0.3);
+    }
+
+    .metric span {
+      display: block;
+      margin-bottom: 4px;
+      color: #a8d0ec;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+    }
+
+    .metric b {
+      font-size: 13px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #ffffff;
+      overflow-wrap: anywhere;
     }
 
     .note {
       margin: 0;
-      color: #a9dcf6;
-      font-size: 12px;
-      font-weight: 300;
-      line-height: 1.6;
+      color: #9ec8e6;
+      font-size: 10px;
+      font-weight: 400;
+      line-height: 1.55;
     }
 
-    /*
-     * 工程图线（参考 GB/T 4457.4 / ISO 128）
-     * 粗实线 : 细实线 ≈ 2 : 1；non-scaling-stroke 保持屏幕线宽比
-     */
+    /* 图线 */
     .draft-thick,
     .draft-thin,
     .draft-dash,
@@ -329,42 +360,39 @@
       vector-effect: non-scaling-stroke;
     }
 
-    /* 粗实线：可见轮廓 */
     .draft-thick {
       stroke: var(--draft-ink);
       stroke-width: var(--draft-thick);
     }
 
-    /* 细实线：尺寸线、尺寸界线 */
     .draft-thin {
       stroke: var(--draft-ink-dim);
       stroke-width: var(--draft-thin);
     }
 
-    /* 细虚线：开口参考 / 假想轮廓 */
     .draft-dash {
-      stroke: rgba(160, 220, 245, 0.72);
+      stroke: rgba(230, 245, 255, 0.75);
       stroke-width: var(--draft-thin);
       stroke-dasharray: 4 2.5;
     }
 
-    /* 装入轨迹（示意用辅助线，非标准图线） */
     .draft-aux {
-      stroke: rgba(60, 199, 255, 0.75);
+      stroke: rgba(200, 240, 255, 0.9);
       stroke-width: var(--draft-thin);
       stroke-dasharray: 5 4;
       stroke-linecap: round;
     }
 
-    /* 剖面区域：仅 45° 细实线剖面线 */
+    /* 外围实体阴影已取消 */
     .wall {
-      fill: url(#hatchMetal);
+      fill: none;
       stroke: none;
+      display: none;
     }
 
-    /* 空腔：浅底、无剖面线 */
+    /* 仅空腔内部淡透明层，区分内外 */
     .cavity-fill {
-      fill: var(--space-fill);
+      fill: var(--cavity-wash);
       stroke: none;
     }
 
@@ -375,7 +403,7 @@
 
     .dim-text,
     .label-text {
-      fill: #f0faff;
+      fill: #ffffff;
       font-size: 10px;
       font-weight: 600;
       font-variant-numeric: tabular-nums;
@@ -384,14 +412,14 @@
     }
 
     .label-text.muted {
-      fill: rgba(200, 230, 245, 0.78);
+      fill: #d0ebfa;
       font-size: 9px;
       font-weight: 500;
     }
 
     .turn-dot {
-      fill: rgba(60, 199, 255, 0.9);
-      stroke: #061f55;
+      fill: #ffffff;
+      stroke: #0271B8;
       stroke-width: 0.8;
       vector-effect: non-scaling-stroke;
     }
@@ -410,16 +438,11 @@
       vector-effect: non-scaling-stroke;
     }
 
-    #part.blocked #partFill {
-      fill: rgba(180, 35, 24, 0.16);
-    }
-
-    #part.blocked #partRect {
-      stroke: var(--warn);
-    }
+    #part.blocked #partFill { fill: rgba(180, 50, 50, 0.14); }
+    #part.blocked #partRect { stroke: var(--warn); }
 
     #partText {
-      fill: #ffe8ec;
+      fill: #f0d8dc;
       font-size: 11px;
       font-weight: 700;
       font-variant-numeric: tabular-nums;
@@ -428,13 +451,11 @@
       stroke: none;
     }
 
-    #part.blocked #partText {
-      fill: var(--warn);
-    }
+    #part.blocked #partText { fill: var(--warn); }
 
     .ghost {
       fill: none;
-      stroke: rgba(92, 240, 167, 0.7);
+      stroke: rgba(140, 255, 200, 0.75);
       stroke-width: var(--draft-thin);
       stroke-dasharray: 4 2.5;
       stroke-linecap: square;
@@ -443,123 +464,132 @@
     }
 
     .hit-dot {
-      fill: #ff707d;
-      stroke: #fff4f6;
+      fill: #ff9aa6;
+      stroke: #ffffff;
       stroke-width: 1;
       vector-effect: non-scaling-stroke;
     }
 
     .hit-label {
-      fill: #ffd0d5;
+      fill: #ffe0e4;
       font-size: 9px;
       font-weight: 600;
       stroke: none;
     }
 
-    #hatchMetal line {
-      stroke: var(--draft-hatch);
-      stroke-width: 0.45;
-      vector-effect: non-scaling-stroke;
+    /* —— 页脚：弱存在 —— */
+    .app-footer {
+      flex: 0 0 auto;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 6px 16px 8px;
+      border-top: 1px solid var(--line);
+      background: #015a94;
+      color: #8ebfe0;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.02em;
     }
 
-    @media (max-width: 1100px) {
-      main {
-        width: min(100vw - 24px, 900px);
-        padding-top: 18px;
+    .app-footer a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .app-footer a:hover {
+      color: #c5e6fa;
+    }
+
+    /* —— 平板 / 手机 —— */
+    @media (max-width: 900px) {
+      body {
+        overflow: auto;
+      }
+
+      .app {
+        height: auto;
+        min-height: 100%;
       }
 
       .workspace {
         grid-template-columns: 1fr;
+        grid-template-rows: minmax(38vh, 46vh) auto;
       }
 
+      .stage {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        min-height: 38vh;
+      }
+
+      /* 数值区：横向滑动画板 */
       .controls {
-        order: -1;
+        flex-direction: row;
+        align-items: stretch;
+        overflow-x: auto;
+        overflow-y: hidden;
+        gap: 10px;
+        padding: 10px 12px 14px;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
       }
 
-      svg {
-        min-height: clamp(360px, 62vw, 520px);
-      }
-    }
-
-    @media (max-width: 700px) {
-      main {
-        width: min(100vw - 16px, 640px);
-        padding: 18px 0 28px;
+      .panel {
+        flex: 0 0 min(86vw, 320px);
+        max-height: 46vh;
+        overflow-y: auto;
+        scroll-snap-align: start;
       }
 
-      header {
-        text-align: left;
-        justify-items: start;
-      }
-
-      .stage-head,
-      .controls {
-        padding: 12px;
-      }
-
-      .svg-wrap {
-        padding: 8px;
-      }
-
-      .input-grid,
-      .metrics {
-        gap: 8px;
+      .panel-result {
+        flex-basis: min(90vw, 340px);
       }
     }
 
     @media (max-width: 520px) {
+      .app-header {
+        padding: 8px 12px;
+        min-height: 40px;
+      }
+
+      .app-header .brand {
+        font-size: 15px;
+        white-space: normal;
+      }
+
+      .app-header .hint {
+        display: none;
+      }
+
       .input-grid,
       .metrics,
       .actions {
         grid-template-columns: 1fr;
       }
-
-      .span-2 {
-        grid-column: auto;
-      }
-
-      h1 {
-        font-size: 24px;
-      }
-
-      .lead {
-        font-size: 13px;
-      }
-
-      svg {
-        min-height: 320px;
-      }
     }
   </style>
 </head>
 <body>
-  <main>
-    <header>
-      <h1>凹位装配模拟验证器</h1>
-      <p class="version">v1.1 · 二维剖面 · 可扩展至 v2 三维</p>
-      <p class="lead">输入空腔和矩形尺寸后点击验证。左右退进会与下方开口自动联动；左右空腔高度和内外圆角半径可不同。计算按二维剖面近似：矩形只能从下方开口进入，可旋转，最终水平放到顶部。安装间隙会收紧碰撞判定；最终贴顶时，离顶距离须不小于安装间隙，二者会互相制约。</p>
+  <div class="app">
+    <header class="app-header">
+      <p class="brand">EISV凹位装配模拟验证器 V1.1.4</p>
+      <p class="hint">改参即重算 · 离顶距离 ≥ 安装间隙 · 二维近似 · 正式加工请 CAD 复核</p>
     </header>
 
     <section class="workspace" aria-label="凹位尺寸验证工具">
       <div class="stage">
-        <div class="stage-head">
-          <p class="stage-title">装入路径模拟</p>
-        </div>
         <div class="svg-wrap">
           <svg id="diagram" viewBox="-30 -30 292 240" role="img" aria-labelledby="svgTitle svgDesc">
             <title id="svgTitle">凹位尺寸和矩形装入路径示意</title>
-            <desc id="svgDesc">可输入顶部净宽、下方开口、左右退进、左右空腔高度、左右内外圆角半径、矩形长度和高度、安装间隙。矩形从下方开口旋转进入。</desc>
+            <desc id="svgDesc">凹腔与矩形装入路径的二维剖面示意。</desc>
             <defs>
-              <!-- 金属剖面线：45° 细实线，间距由脚本按图幅调整 -->
-              <pattern id="hatchMetal" width="4.5" height="4.5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                <line id="hatchMetalLine" x1="0" y1="0" x2="0" y2="4.5"></line>
-              </pattern>
-              <!-- 尺寸箭头：闭口实心；marker 随线宽缩放，配合 non-scaling 细实线保持屏幕可读 -->
               <marker id="dimArrowEnd" viewBox="0 0 10 6" refX="9.5" refY="3" markerWidth="9" markerHeight="6" orient="auto" markerUnits="strokeWidth">
-                <path d="M0 0.4 L9.5 3 L0 5.6 Z" fill="#b7dff5"></path>
+                <path d="M0 0.4 L9.5 3 L0 5.6 Z" fill="#ffffff"></path>
               </marker>
               <marker id="dimArrowStart" viewBox="0 0 10 6" refX="0.5" refY="3" markerWidth="9" markerHeight="6" orient="auto" markerUnits="strokeWidth">
-                <path d="M10 0.4 L0.5 3 L10 5.6 Z" fill="#b7dff5"></path>
+                <path d="M10 0.4 L0.5 3 L10 5.6 Z" fill="#ffffff"></path>
               </marker>
             </defs>
 
@@ -612,129 +642,129 @@
               <text id="leftStepDimText" class="dim-text" text-anchor="middle"></text>
             </g>
 
-            <text id="solidLabel" class="label-text muted">金属</text>
-
             <g id="part">
               <rect id="partFill"></rect>
               <rect id="partRect"></rect>
-              <text id="partText">200 x 40</text>
+              <text id="partText">200×40</text>
             </g>
           </svg>
         </div>
       </div>
 
       <aside class="controls" aria-label="尺寸输入和计算结果">
-        <fieldset>
-          <legend>空腔尺寸</legend>
-          <div class="input-grid">
-            <label for="topWidthInput">
-              顶部净宽（mm）
-              <input id="topWidthInput" type="number" inputmode="decimal" min="1" step="0.5" value="212">
-            </label>
-            <label for="entryWidthInput">
-              下方开口（mm）
-              <input id="entryWidthInput" type="number" inputmode="decimal" min="1" step="0.5" value="192">
-            </label>
-            <label for="leftInsetInput">
-              左侧退进（mm）
-              <input id="leftInsetInput" type="number" inputmode="decimal" min="0" step="0.5" value="0">
-            </label>
-            <label for="rightInsetInput">
-              右侧退进（mm）
-              <input id="rightInsetInput" type="number" inputmode="decimal" min="0" step="0.5" value="20">
-            </label>
-            <label for="leftHeightInput">
-              左侧空腔高度（mm）
-              <input id="leftHeightInput" type="number" inputmode="decimal" min="1" step="0.5" value="50">
-            </label>
-            <label for="rightHeightInput">
-              右侧空腔高度（mm）
-              <input id="rightHeightInput" type="number" inputmode="decimal" min="1" step="0.5" value="50">
-            </label>
-            <label for="leftOuterRadiusInput">
-              左外角圆角半径（mm）
-              <input id="leftOuterRadiusInput" type="number" inputmode="decimal" min="0" step="0.5" value="0">
-            </label>
-            <label for="leftInnerRadiusInput">
-              左内角圆角半径（mm）
-              <input id="leftInnerRadiusInput" type="number" inputmode="decimal" min="0" step="0.5" value="0">
-            </label>
-            <label for="rightOuterRadiusInput">
-              右外角圆角半径（mm）
-              <input id="rightOuterRadiusInput" type="number" inputmode="decimal" min="0" step="0.5" value="0">
-            </label>
-            <label for="rightInnerRadiusInput">
-              右内角圆角半径（mm）
-              <input id="rightInnerRadiusInput" type="number" inputmode="decimal" min="0" step="0.5" value="0">
-            </label>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>放入物体</legend>
-          <div class="input-grid">
-            <label for="partLengthInput">
-              矩形长度（mm）
-              <input id="partLengthInput" type="number" inputmode="decimal" min="1" step="0.5" value="200">
-            </label>
-            <label for="partHeightInput">
-              矩形高度（mm）
-              <input id="partHeightInput" type="number" inputmode="decimal" min="1" step="0.5" value="40">
-            </label>
-            <label for="topGapInput">
-              离顶距离（mm）
-              <input id="topGapInput" type="number" inputmode="decimal" min="0" step="0.5" value="5">
-            </label>
-            <label for="clearanceInput">
-              安装间隙（mm）
-              <input id="clearanceInput" type="number" inputmode="decimal" min="0" step="0.1" value="0">
-            </label>
-          </div>
-        </fieldset>
-
-        <div class="actions">
-          <button class="primary" id="validateBtn" type="button">验证</button>
-          <button id="resetBtn" type="button">重置</button>
-          <button id="replayBtn" type="button" disabled>重播动画</button>
-          <button id="copyBtn" type="button" disabled>复制结果</button>
+        <div class="panel panel-presets">
+          <p class="panel-title">预设凹位</p>
+          <div class="preset-row" id="presetRow"></div>
         </div>
 
-        <div id="result" class="result wait" aria-live="polite">
-          <strong id="resultTitle">待验证</strong>
-          <p id="resultCopy">当前尺寸已载入，点击验证开始计算。</p>
+        <div class="panel panel-cavity">
+          <p class="panel-title">空腔尺寸</p>
+          <fieldset>
+            <legend>空腔尺寸</legend>
+            <div class="input-grid">
+              <label for="topWidthInput">顶部净宽（mm）
+                <input id="topWidthInput" type="number" inputmode="decimal" min="1" step="0.5" value="212">
+              </label>
+              <label for="entryWidthInput">下方开口（mm）
+                <input id="entryWidthInput" type="number" inputmode="decimal" min="1" step="0.5" value="192">
+              </label>
+              <label for="leftInsetInput">左侧退进（mm）
+                <input id="leftInsetInput" type="number" inputmode="decimal" min="0" step="0.5" value="0">
+              </label>
+              <label for="rightInsetInput">右侧退进（mm）
+                <input id="rightInsetInput" type="number" inputmode="decimal" min="0" step="0.5" value="20">
+              </label>
+              <label for="leftHeightInput">左侧空腔高度（mm）
+                <input id="leftHeightInput" type="number" inputmode="decimal" min="1" step="0.5" value="50">
+              </label>
+              <label for="rightHeightInput">右侧空腔高度（mm）
+                <input id="rightHeightInput" type="number" inputmode="decimal" min="1" step="0.5" value="50">
+              </label>
+              <label for="leftOuterRadiusInput">左外角圆角半径（mm）
+                <input id="leftOuterRadiusInput" type="number" inputmode="decimal" min="0" step="0.5" value="0">
+              </label>
+              <label for="leftInnerRadiusInput">左内角圆角半径（mm）
+                <input id="leftInnerRadiusInput" type="number" inputmode="decimal" min="0" step="0.5" value="0">
+              </label>
+              <label for="rightOuterRadiusInput">右外角圆角半径（mm）
+                <input id="rightOuterRadiusInput" type="number" inputmode="decimal" min="0" step="0.5" value="0">
+              </label>
+              <label for="rightInnerRadiusInput">右内角圆角半径（mm）
+                <input id="rightInnerRadiusInput" type="number" inputmode="decimal" min="0" step="0.5" value="0">
+              </label>
+            </div>
+          </fieldset>
         </div>
 
-        <div class="metrics">
-          <div class="metric">
-            <span>最大可放长度</span>
-            <b id="maxLength">--</b>
-          </div>
-          <div class="metric">
-            <span>当前物体</span>
-            <b id="partMetric">200 x 40 · 顶5 · 隙0</b>
-          </div>
-          <div class="metric">
-            <span>顶部 / 开口</span>
-            <b id="widthMetric">212 / 192</b>
-          </div>
-          <div class="metric">
-            <span>左高 / 右高</span>
-            <b id="heightMetric">50 / 50</b>
-          </div>
-          <div class="metric">
-            <span>左退进 / 右退进</span>
-            <b id="insetMetric">0 / 20</b>
-          </div>
-          <div class="metric">
-            <span>左角 / 右角</span>
-            <b id="radiusMetric">0</b>
-          </div>
+        <div class="panel panel-part">
+          <p class="panel-title">放入物体</p>
+          <fieldset>
+            <legend>放入物体</legend>
+            <div class="input-grid">
+              <label for="partLengthInput">矩形长度（mm）
+                <input id="partLengthInput" type="number" inputmode="decimal" min="1" step="0.5" value="200">
+              </label>
+              <label for="partHeightInput">矩形高度（mm）
+                <input id="partHeightInput" type="number" inputmode="decimal" min="1" step="0.5" value="40">
+              </label>
+              <label for="topGapInput">离顶距离（mm）
+                <input id="topGapInput" type="number" inputmode="decimal" min="0" step="0.5" value="5">
+              </label>
+              <label for="clearanceInput">安装间隙（mm）
+                <input id="clearanceInput" type="number" inputmode="decimal" min="0" step="0.1" value="0">
+              </label>
+            </div>
+          </fieldset>
         </div>
 
-        <p class="note">说明：本页为单文件，不依赖网络和外部库，可离线打开。安装间隙会收紧碰撞边界；离顶距离表示最终上表面到顶壁的空隙，须 ≥ 安装间隙。计算为二维采样近似（v1.1）；实际加工请按真实公差用 CAD 复核。v2 将扩展三维模式，求解接口已预留。</p>
+        <div class="panel panel-result">
+          <p class="panel-title">结果与操作</p>
+          <div class="actions">
+            <button class="primary" id="validateBtn" type="button">再次计算</button>
+            <button id="resetBtn" type="button">重置</button>
+            <button id="replayBtn" type="button" disabled>重播</button>
+            <button id="copyBtn" type="button" disabled>复制结果</button>
+          </div>
+          <div id="result" class="result wait" aria-live="polite" style="margin-top:10px">
+            <strong id="resultTitle">计算中</strong>
+            <p id="resultCopy">正在根据当前尺寸更新。</p>
+          </div>
+          <div class="metrics" style="margin-top:10px">
+            <div class="metric">
+              <span>最大可放长度</span>
+              <b id="maxLength">--</b>
+            </div>
+            <div class="metric">
+              <span>当前物体</span>
+              <b id="partMetric">200 × 40</b>
+            </div>
+            <div class="metric">
+              <span>顶部 / 开口</span>
+              <b id="widthMetric">212 / 192</b>
+            </div>
+            <div class="metric">
+              <span>左高 / 右高</span>
+              <b id="heightMetric">50 / 50</b>
+            </div>
+            <div class="metric">
+              <span>左退进 / 右退进</span>
+              <b id="insetMetric">0 / 20</b>
+            </div>
+            <div class="metric">
+              <span>圆角 外/内</span>
+              <b id="radiusMetric">0</b>
+            </div>
+          </div>
+          <p class="note" style="margin-top:10px">二维采样近似 · 离顶距离 ≥ 安装间隙 · 单文件离线可用 · 正式加工请 CAD 复核</p>
+        </div>
       </aside>
     </section>
-  </main>
+
+    <footer class="app-footer">
+      <span>EISV · Engineering Installation Simulation Validator</span>
+      <span>Author Tony.D · © 2026 · MIT License</span>
+    </footer>
+  </div>
 
   <script id="eisv-core">
 /**
@@ -746,7 +776,7 @@
   "use strict";
 
   const meta = {
-    version: "1.1",
+    version: "1.1.4",
     mode: "2d",
     modesAvailable: ["2d"]
   };
@@ -859,15 +889,21 @@
       return "下方开口应等于顶部净宽减左侧退进和右侧退进。";
     }
     const cavityMaxH = Math.max(values.leftHeight, values.rightHeight);
+    const hasInset = values.leftInset > 0.001 || values.rightInset > 0.001;
     if (values.partHeight > cavityMaxH) {
       return "矩形高度大于空腔最大高度，无法放入。";
     }
-    if (values.topGap + values.partHeight > cavityMaxH + 0.001) {
+    if (hasInset) {
+      // 落在退台上：件高不宜超过较矮一侧退台高度（否则顶面会越过腔顶）
+      const stepMin = Math.min(values.leftHeight, values.rightHeight);
+      if (values.partHeight > stepMin + 0.001) {
+        return "矩形高度大于较矮一侧空腔高度，无法落在退台上。";
+      }
+    } else if (values.topGap + values.partHeight > cavityMaxH + 0.001) {
       return "矩形高度与离顶距离之和超过空腔高度，无法水平放到顶部。";
     }
-    // 最终贴顶区：零件上表面在 y=topGap，安装间隙要求离实体壁 ≥ clearance
-    // 故离顶距离必须 ≥ 安装间隙，否则顶侧间隙与离顶设定互相干涉（并非「越过」顶壁）
-    if (values.clearance > 0 && values.topGap + 0.001 < values.clearance) {
+    // 直壁吸顶：离顶距离须 ≥ 安装间隙。有退台时最终位姿由退台决定，此项不套用用户离顶输入。
+    if (!hasInset && values.clearance > 0 && values.topGap + 0.001 < values.clearance) {
       return "离顶距离与安装间隙互相干涉：最终位姿下零件上表面到顶壁的空隙为离顶距离，须不小于安装间隙。请增大离顶距离，或减小安装间隙（贴顶且要求间隙时二者不能同时满足）。";
     }
     if (Object.values(values).some((value) => Number.isFinite(value) && value > 800)) {
@@ -966,8 +1002,9 @@
 
     const fill = `M 0 0 H ${geom.topWidth} ${rightOuter} ${rightInner} V ${geom.yMax} H ${geom.entryLeft} ${leftInner} ${leftOuter} V 0 Z`;
     const stroke = `M ${geom.entryLeft} ${geom.yMax} ${leftInner} ${leftOuter} V 0 H ${geom.topWidth} ${rightOuter} ${rightInner} V ${geom.yMax}`;
-    const pad = Math.max(24, geom.topWidth * 0.1);
-    const wall = `M ${-pad} ${-pad} H ${geom.topWidth + pad} V ${geom.yMax + pad} H ${-pad} Z ${fill}`;
+    // wall 路径保留兼容，UI 已改为腔内 wash、不再画外围实体阴影
+    const pad = Math.max(30, geom.topWidth * 0.14);
+    const wall = "";
     return { fill, stroke, wall, pad };
   }
 
@@ -1022,8 +1059,10 @@
       [-halfL, halfH]
     ];
     const points = [];
-    const base = Math.max(8, Math.ceil(Math.max(length, height) / 8));
-    const perEdge = denser ? base + 4 : base;
+    const base = denser
+      ? Math.max(16, Math.ceil(Math.max(length, height) / 4))
+      : Math.max(10, Math.ceil(Math.max(length, height) / 8));
+    const perEdge = denser ? base + 8 : base;
 
     for (let i = 0; i < corners.length; i += 1) {
       const start = corners[i];
@@ -1039,27 +1078,61 @@
   }
 
   function worldSamples(pose, length, height, denser) {
+    const rad = (pose.deg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
     const local = edgeSamples(length, height, pose.deg, denser);
-    return local.map(([lx, ly]) => [pose.x + lx, pose.y + ly]);
+    const points = local.map(([lx, ly]) => [pose.x + lx, pose.y + ly]);
+    if (denser) {
+      const halfL = length / 2;
+      const halfH = height / 2;
+      const nx = 8;
+      const ny = 5;
+      for (let ix = 0; ix <= nx; ix += 1) {
+        for (let iy = 0; iy <= ny; iy += 1) {
+          const lx = -halfL + (length * ix) / nx;
+          const ly = -halfH + (height * iy) / ny;
+          points.push([
+            pose.x + lx * cos - ly * sin,
+            pose.y + lx * sin + ly * cos
+          ]);
+        }
+      }
+    }
+    return points;
   }
 
   function createSpace2D(values) {
     const geom = deriveGeom(values);
     const partTemplate = { length: values.partLength, height: values.partHeight };
 
-    function angleList() {
-      const list = [];
-      for (let a = geom.minAngle; a <= geom.maxAngle; a += geom.angleStep) list.push(a);
-      return list;
+    function pointFree(x, y, c) {
+      if (y < -0.001 + c) return false;
+      if (x < xMinAt(geom, y) + c - 0.001 || x > xMaxAt(geom, y) - c + 0.001) return false;
+      return true;
     }
 
-    function validPose(part, pose, clearance) {
+    function validPose(part, pose, clearance, strict) {
       const c = clearance || 0;
-      const denser = c > 0;
-      const samples = worldSamples(pose, part.length, part.height, denser);
+      const samples = worldSamples(pose, part.length, part.height, Boolean(strict));
       for (const [x, y] of samples) {
-        if (y < -0.001 + c) return false;
-        if (x < xMinAt(geom, y) + c - 0.001 || x > xMaxAt(geom, y) - c + 0.001) return false;
+        if (!pointFree(x, y, c)) return false;
+      }
+      if (!strict) return true;
+      // 最终落位：底边加密 + 退台面下方禁入
+      const rad = (pose.deg * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const halfL = part.length / 2;
+      const halfH = part.height / 2;
+      const n = Math.max(32, Math.ceil(part.length / 2));
+      for (let i = 0; i <= n; i += 1) {
+        const lx = -halfL + (part.length * i) / n;
+        const x = pose.x + lx * cos - halfH * sin;
+        const y = pose.y + lx * sin + halfH * cos;
+        if (x < geom.entryLeft - 0.001 && y > geom.leftHeight + 0.001 + c) return false;
+        if (x > geom.entryRight + 0.001 && y > geom.rightHeight + 0.001 + c) return false;
+        if (!pointFree(x, y, c)) return false;
       }
       return true;
     }
@@ -1114,13 +1187,180 @@
       return null;
     }
 
+    /**
+     * 最终落位（分层）：
+     * 1 无退台 → top 吸顶对中
+     * 2 等高退台 → step 水平对中
+     * 3 不等高 → bridge：浅侧内角 + 深侧台面；深侧触点扫描，可行域内 |cx−开口中心| 最小
+     * 4 否则 → 较矮一侧 step，仍优先对中（有退台不吸顶）
+     */
     function finalPlacementPose(part, options) {
-      const topGap = options.topGap != null ? options.topGap : geom.topGap;
+      const clearance = options.clearance || 0;
+      const topGapRaw = options.topGap != null ? options.topGap : geom.topGap;
       const openingCenter = geom.entryLeft + geom.entryWidth / 2;
-      const minX = part.length / 2;
-      const maxX = geom.topWidth - part.length / 2;
-      const x = Math.max(minX, Math.min(maxX, openingCenter));
-      return { x, y: topGap + part.height / 2, deg: 0 };
+      const halfL = part.length / 2;
+      const halfH = part.height / 2;
+      const topW = geom.topWidth;
+      const clampX = (x) => Math.max(halfL, Math.min(topW - halfL, x));
+      const lh = geom.leftHeight;
+      const rh = geom.rightHeight;
+      const ax = geom.entryLeft;
+      const bx = geom.entryRight;
+      const L = part.length;
+      const dy = rh - lh;
+
+      function bottomCorners(pose) {
+        const rad = (pose.deg * Math.PI) / 180;
+        const c = Math.cos(rad);
+        const s = Math.sin(rad);
+        return {
+          contactLeft: {
+            x: pose.x - halfL * c - halfH * s,
+            y: pose.y - halfL * s + halfH * c
+          },
+          contactRight: {
+            x: pose.x + halfL * c - halfH * s,
+            y: pose.y + halfL * s + halfH * c
+          }
+        };
+      }
+
+      function poseFromBottomLeft(x1, y1, cos, sin, deg) {
+        return {
+          x: x1 + halfL * cos + halfH * sin,
+          y: y1 + halfL * sin - halfH * cos,
+          deg
+        };
+      }
+
+      function pack(mode, pose, extra) {
+        const ends = bottomCorners(pose);
+        const out = {
+          x: pose.x,
+          y: pose.y,
+          deg: pose.deg,
+          mode,
+          derivedTopGap: Math.max(0, pose.y - halfH * Math.cos((pose.deg * Math.PI) / 180)),
+          contactLeft: ends.contactLeft,
+          contactRight: ends.contactRight
+        };
+        if (extra) {
+          if (extra.supportLeft) out.supportLeft = extra.supportLeft;
+          if (extra.supportRight) out.supportRight = extra.supportRight;
+          if (extra.derivedTopGap != null) out.derivedTopGap = extra.derivedTopGap;
+        }
+        return out;
+      }
+
+      // 1) 直壁
+      if (geom.leftInset <= 0.001 && geom.rightInset <= 0.001) {
+        const gap = Number.isFinite(topGapRaw) ? topGapRaw : 1;
+        return pack("top", { x: clampX(openingCenter), y: gap + halfH, deg: 0 }, { derivedTopGap: gap });
+      }
+
+      // 2) 等高
+      if (Math.abs(dy) < 0.001) {
+        const cx = clampX(openingCenter);
+        return pack("step", { x: cx, y: lh - halfH, deg: 0 }, {
+          derivedTopGap: Math.max(0, lh - part.height),
+          supportLeft: { x: Math.max(0, cx - halfL), y: lh },
+          supportRight: { x: Math.min(topW, cx + halfL), y: rh }
+        });
+      }
+
+      // 3) 不等高 bridge
+      // 浅侧内角 S + 深侧台面点 D；|SD|≤L；多余长只伸向浅侧；在宽松校验下排序，再 strict 确认
+      if (L + 0.001 >= Math.abs(dy)) {
+        const leftShallow = lh <= rh;
+        const S = leftShallow ? { x: ax, y: lh } : { x: bx, y: rh };
+        const deepY = leftShallow ? rh : lh;
+        const deepX0 = leftShallow ? bx : 0;
+        const deepX1 = leftShallow ? topW : ax;
+        const deepW = Math.max(deepX1 - deepX0, 0);
+        const n = Math.min(32, Math.max(16, Math.ceil(deepW) || 16));
+
+        const ranked = [];
+        for (let i = 0; i <= n; i += 1) {
+          const Dx = deepX0 + (deepW * i) / n;
+          const spanX = Dx - S.x;
+          const spanY = deepY - S.y;
+          const d = Math.hypot(spanX, spanY);
+          if (d < Math.abs(dy) - 0.001 || d > L + 0.001) continue;
+
+          const t = L - d;
+          let x1;
+          let y1;
+          let cos;
+          let sin;
+          if (leftShallow) {
+            cos = spanX / d;
+            sin = spanY / d;
+            x1 = S.x - t * cos;
+            y1 = S.y - t * sin;
+            if (x1 < -0.05) continue;
+          } else {
+            cos = (S.x - Dx) / d;
+            sin = (S.y - deepY) / d;
+            x1 = Dx;
+            y1 = deepY;
+            if (x1 + L * cos > topW + 0.05) continue;
+          }
+
+          const deg = (Math.atan2(sin, cos) * 180) / Math.PI;
+          const pose = poseFromBottomLeft(x1, y1, cos, sin, deg);
+          if (!Number.isFinite(pose.x) || !Number.isFinite(pose.y)) continue;
+          if (!validPose(part, pose, clearance, false)) continue;
+          ranked.push({
+            pose,
+            score: Math.abs(pose.x - openingCenter),
+            supportLeft: leftShallow ? S : { x: Dx, y: deepY },
+            supportRight: leftShallow ? { x: Dx, y: deepY } : S
+          });
+        }
+
+        ranked.sort((a, b) => a.score - b.score);
+        const limit = Math.min(8, ranked.length);
+        for (let i = 0; i < limit; i += 1) {
+          const item = ranked[i];
+          if (!validPose(part, item.pose, clearance, true)) continue;
+          return pack("bridge", item.pose, {
+            supportLeft: item.supportLeft,
+            supportRight: item.supportRight
+          });
+        }
+      }
+
+      // 4) 矮台水平，优先开口中心
+      const stepY = Math.min(lh, rh);
+      const cx = clampX(openingCenter);
+      const stepPose = { x: cx, y: stepY - halfH, deg: 0 };
+      if (validPose(part, stepPose, clearance, true)) {
+        return pack("step", stepPose, {
+          derivedTopGap: Math.max(0, stepY - part.height),
+          supportLeft: { x: cx - halfL, y: stepY },
+          supportRight: { x: cx + halfL, y: stepY }
+        });
+      }
+      const xSpan = Math.max(topW - L, 0);
+      let found = null;
+      let foundScore = Infinity;
+      const nStep = 24;
+      for (let i = 0; i <= nStep; i += 1) {
+        const x = halfL + (xSpan * i) / nStep;
+        const trial = { x, y: stepY - halfH, deg: 0 };
+        if (!validPose(part, trial, clearance, true)) continue;
+        const sc = Math.abs(x - openingCenter);
+        if (sc < foundScore) {
+          foundScore = sc;
+          found = trial;
+        }
+      }
+      const pose = found || stepPose;
+      return pack("step", pose, {
+        derivedTopGap: Math.max(0, stepY - part.height),
+        supportLeft: { x: pose.x - halfL, y: stepY },
+        supportRight: { x: pose.x + halfL, y: stepY }
+      });
     }
 
     function seedFinalCenters(part, options) {
@@ -1246,16 +1486,42 @@
     const parent = keepParents ? new Map() : null;
     const { finalPose, centers } = space.seedFinalCenters(part, { topGap, clearance });
 
+    // 最终姿态可能带倾角（不等高斜担），按最近离散角播种
+    let finalAngleIndex = zeroAngleIndex;
+    let bestAngDist = Infinity;
+    for (let i = 0; i < angles.length; i += 1) {
+      const d = Math.abs(angles[i] - finalPose.deg);
+      if (d < bestAngDist) {
+        bestAngDist = d;
+        finalAngleIndex = i;
+      }
+    }
+
+    function trySeed(ix, iy, ia) {
+      if (ix < 0 || ix >= gridXCount || iy < 0 || iy >= gridYCount) return;
+      if (ia < 0 || ia >= angles.length) return;
+      const sk = stateKey(ix, iy, ia);
+      if (seen.has(sk)) return;
+      const p = poseOf(ix, iy, ia);
+      if (!space.validPose(part, p, clearance)) return;
+      seen.add(sk);
+      queue.push(sk);
+      if (parent) parent.set(sk, -1);
+    }
+
+    // 优先精确最终位姿附近
+    const seedIy = Math.round(finalPose.y / grid);
     for (const cx of centers) {
       const ix = Math.round(cx / grid);
-      const iy = Math.round(finalPose.y / grid);
-      if (ix < 0 || ix >= gridXCount || iy < 0 || iy >= gridYCount) continue;
-      const sk = stateKey(ix, iy, zeroAngleIndex);
-      const p = poseOf(ix, iy, zeroAngleIndex);
-      if (!seen.has(sk) && space.validPose(part, p, clearance)) {
-        seen.add(sk);
-        queue.push(sk);
-        if (parent) parent.set(sk, -1);
+      for (let dy = -1; dy <= 1; dy += 1) {
+        trySeed(ix, seedIy + dy, finalAngleIndex);
+      }
+    }
+    // 兜底：仍尝试水平 0°（直壁/等高）
+    if (finalAngleIndex !== zeroAngleIndex) {
+      for (const cx of centers.slice(0, 8)) {
+        const ix = Math.round(cx / grid);
+        trySeed(ix, seedIy, zeroAngleIndex);
       }
     }
 
@@ -1545,6 +1811,115 @@
     cl: "clearance"
   };
 
+  /** 常见凹位预设（快速调用） */
+  const PRESETS = [
+    {
+      id: "leftInset",
+      label: "左侧退进",
+      values: {
+        topWidth: 212,
+        entryWidth: 192,
+        leftInset: 20,
+        rightInset: 0,
+        leftHeight: 50,
+        rightHeight: 50,
+        leftOuterRadius: 0,
+        leftInnerRadius: 0,
+        rightOuterRadius: 0,
+        rightInnerRadius: 0,
+        partLength: 200,
+        partHeight: 40,
+        topGap: 5,
+        clearance: 0
+      }
+    },
+    {
+      id: "default",
+      label: "右侧退进",
+      values: { ...C.DEFAULTS }
+    },
+    {
+      id: "symmetric",
+      label: "对称退进",
+      values: {
+        topWidth: 300,
+        entryWidth: 260,
+        leftInset: 20,
+        rightInset: 20,
+        leftHeight: 50,
+        rightHeight: 50,
+        leftOuterRadius: 0,
+        leftInnerRadius: 0,
+        rightOuterRadius: 0,
+        rightInnerRadius: 0,
+        partLength: 250,
+        partHeight: 30,
+        topGap: 5,
+        clearance: 0
+      }
+    },
+    {
+      id: "straight",
+      label: "直壁通口",
+      values: {
+        topWidth: 200,
+        entryWidth: 200,
+        leftInset: 0,
+        rightInset: 0,
+        leftHeight: 60,
+        rightHeight: 60,
+        leftOuterRadius: 0,
+        leftInnerRadius: 0,
+        rightOuterRadius: 0,
+        rightInnerRadius: 0,
+        partLength: 180,
+        partHeight: 40,
+        topGap: 1,
+        clearance: 0
+      }
+    },
+    {
+      id: "fillet",
+      label: "圆角收口",
+      values: {
+        topWidth: 300,
+        entryWidth: 260,
+        leftInset: 20,
+        rightInset: 20,
+        leftHeight: 50,
+        rightHeight: 50,
+        leftOuterRadius: 10,
+        leftInnerRadius: 5,
+        rightOuterRadius: 10,
+        rightInnerRadius: 5,
+        partLength: 275,
+        partHeight: 30,
+        topGap: 1,
+        clearance: 0
+      }
+    },
+    {
+      id: "asymmetric",
+      label: "左右不等高",
+      values: {
+        topWidth: 240,
+        entryWidth: 200,
+        leftInset: 10,
+        rightInset: 30,
+        leftHeight: 40,
+        rightHeight: 55,
+        leftOuterRadius: 0,
+        leftInnerRadius: 0,
+        rightOuterRadius: 0,
+        rightInnerRadius: 0,
+        partLength: 190,
+        partHeight: 28,
+        topGap: 5,
+        clearance: 0
+      }
+    }
+  ];
+
   const inputs = {
     topWidth: document.getElementById("topWidthInput"),
     entryWidth: document.getElementById("entryWidthInput"),
@@ -1588,7 +1963,6 @@
   const partFill = document.getElementById("partFill");
   const partRect = document.getElementById("partRect");
   const partText = document.getElementById("partText");
-  const solidLabel = document.getElementById("solidLabel");
   const hitMarker = document.getElementById("hitMarker");
   const hitDot = document.getElementById("hitDot");
   const hitLabel = document.getElementById("hitLabel");
@@ -1668,8 +2042,7 @@
       textGap: 2.4 * s,
       topOffset: Math.max(11, pad * 0.4),
       sideOffset: Math.max(10, pad * 0.32),
-      stepOffset: Math.min(16, Math.max(10, pad * 0.36)),
-      hatchPitch: Math.max(3.2, Math.min(6.5, geom.topWidth / 48))
+      stepOffset: Math.min(16, Math.max(10, pad * 0.36))
     };
   }
 
@@ -1713,43 +2086,74 @@
     textEl.textContent = C.formatNumber(value);
   }
 
-  function updateHatchPitch(pitch) {
-    const pattern = document.getElementById("hatchMetal");
-    const line = document.getElementById("hatchMetalLine");
-    if (!pattern || !line) return;
-    const p = pitch.toFixed(2);
-    pattern.setAttribute("width", p);
-    pattern.setAttribute("height", p);
-    line.setAttribute("y2", p);
-  }
-
   function setPartPose(pose, blocked) {
+    if (!pose) return;
     part.setAttribute("transform", `translate(${pose.x} ${pose.y}) rotate(${pose.deg})`);
     part.classList.toggle("blocked", Boolean(blocked));
   }
 
-  function setPartSize(geom, length, height) {
-    // 零件：直角轮廓 + 浅填充（非剖切体，不打剖面线）
-    partFill.setAttribute("x", String(-length / 2));
-    partFill.setAttribute("y", String(-height / 2));
+  function cancelPartAnimation() {
+    if (animationId != null) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+  }
+
+  /** 按当前输入计算最终落位并立刻摆正零件（改退进/尺寸时即时对中） */
+  function placePartAtFinal(values) {
+    const raw = values || readInputs();
+    const v = C.valuesForDraw(raw);
+    const space = C.createSpace2D(v);
+    const pose = space.finalPlacementPose(
+      { length: v.partLength, height: v.partHeight },
+      { topGap: v.topGap, clearance: v.clearance || 0 }
+    );
+    setPartPose(pose, false);
+    return pose;
+  }
+
+  function setPartSize(geom, length, height, values) {
+    const hx = -length / 2;
+    const hy = -height / 2;
+    partFill.setAttribute("x", String(hx));
+    partFill.setAttribute("y", String(hy));
     partFill.setAttribute("width", String(length));
     partFill.setAttribute("height", String(height));
-    partRect.setAttribute("x", String(-length / 2));
-    partRect.setAttribute("y", String(-height / 2));
+    partRect.setAttribute("x", String(hx));
+    partRect.setAttribute("y", String(hy));
     partRect.setAttribute("width", String(length));
     partRect.setAttribute("height", String(height));
     partText.textContent = `${C.formatNumber(length)}×${C.formatNumber(height)}`;
     partText.setAttribute("font-size", String(Math.max(8, Math.min(12, Math.min(length, height) * 0.28))));
-    const ghostWidth = Math.min(length, geom.topWidth);
-    const openingCenter = geom.entryLeft + geom.entryWidth / 2;
-    const minX = ghostWidth / 2;
-    const maxX = geom.topWidth - ghostWidth / 2;
-    const ghostX = Math.max(minX, Math.min(maxX, openingCenter)) - ghostWidth / 2;
-    // 最终位姿示意：细虚线假想轮廓，与实体同尺寸
-    ghost.setAttribute("x", String(ghostX));
-    ghost.setAttribute("y", String(geom.topGap));
-    ghost.setAttribute("width", String(ghostWidth));
-    ghost.setAttribute("height", String(height));
+
+    const vals = values || {
+      topWidth: geom.topWidth,
+      entryWidth: geom.entryWidth,
+      leftInset: geom.leftInset,
+      rightInset: geom.rightInset,
+      leftHeight: geom.leftHeight,
+      rightHeight: geom.rightHeight,
+      leftOuterRadius: geom.leftOuterRadius,
+      leftInnerRadius: geom.leftInnerRadius,
+      rightOuterRadius: geom.rightOuterRadius,
+      rightInnerRadius: geom.rightInnerRadius,
+      partLength: length,
+      partHeight: height,
+      topGap: geom.topGap,
+      clearance: 0
+    };
+    const pose = C.createSpace2D(vals).finalPlacementPose(
+      { length, height },
+      { topGap: vals.topGap, clearance: vals.clearance || 0 }
+    );
+    if (ghost) {
+      ghost.setAttribute("x", String(hx));
+      ghost.setAttribute("y", String(hy));
+      ghost.setAttribute("width", String(length));
+      ghost.setAttribute("height", String(height));
+      ghost.setAttribute("transform", `translate(${pose.x} ${pose.y}) rotate(${pose.deg})`);
+    }
+    return pose;
   }
 
   function drawTravelPath(path) {
@@ -1793,14 +2197,21 @@
   }
 
   function animatePath(path, blockedAtEnd) {
-    cancelAnimationFrame(animationId);
+    cancelPartAnimation();
     if (!path.length) return;
 
     const duration = Math.max(1700, Math.min(4300, path.length * 58));
     const delay = 350;
     const startTime = performance.now() + delay;
-
+    // 终点用 finalPlacementPose，避免路径末点网格误差；不在此调用 placePartAtFinal 以免闪到终点
+    const v = C.valuesForDraw(readInputs());
+    const endPose =
+      C.createSpace2D(v).finalPlacementPose(
+        { length: v.partLength, height: v.partHeight },
+        { topGap: v.topGap, clearance: v.clearance || 0 }
+      ) || path[path.length - 1];
     setPartPose(path[0], false);
+
     function tick(now) {
       if (now < startTime) {
         animationId = requestAnimationFrame(tick);
@@ -1808,19 +2219,26 @@
       }
       const t = Math.min(1, (now - startTime) / duration);
       const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      if (t >= 1) {
+        setPartPose(endPose, blockedAtEnd);
+        animationId = null;
+        return;
+      }
       const rawIndex = eased * (path.length - 1);
       const index = Math.floor(rawIndex);
       const nextIndex = Math.min(path.length - 1, index + 1);
       const localT = rawIndex - index;
       const a = path[index];
       const b = path[nextIndex];
-      const pose = {
-        x: a.x + (b.x - a.x) * localT,
-        y: a.y + (b.y - a.y) * localT,
-        deg: a.deg + (b.deg - a.deg) * localT
-      };
-      setPartPose(pose, blockedAtEnd && t >= 0.98);
-      if (t < 1) animationId = requestAnimationFrame(tick);
+      setPartPose(
+        {
+          x: a.x + (b.x - a.x) * localT,
+          y: a.y + (b.y - a.y) * localT,
+          deg: a.deg + (b.deg - a.deg) * localT
+        },
+        false
+      );
+      animationId = requestAnimationFrame(tick);
     }
 
     animationId = requestAnimationFrame(tick);
@@ -1842,6 +2260,7 @@
   }
 
   function updateDiagram(rawValues) {
+    cancelPartAnimation();
     const drawValues = C.valuesForDraw(rawValues);
     const geom = C.deriveGeom(drawValues);
     const paths = C.buildCavityPaths(geom);
@@ -1852,9 +2271,11 @@
     const viewH = geom.yMax + pad * 2;
     diagram.setAttribute("viewBox", `${-pad} ${-pad} ${viewW} ${viewH}`);
 
-    updateHatchPitch(p.hatchPitch);
-
-    wallPath.setAttribute("d", paths.wall);
+    // 取消外围实体阴影；仅腔内浅透明层
+    if (wallPath) {
+      wallPath.setAttribute("d", "");
+      wallPath.setAttribute("visibility", "hidden");
+    }
     cavityFill.setAttribute("d", paths.fill);
     cavityWall.setAttribute("d", paths.stroke);
     openingLine.setAttribute("x1", geom.entryLeft);
@@ -1963,22 +2384,13 @@
       });
     }
 
-    // 剖面材料标注（非尺寸）
-    solidLabel.textContent = "金属";
-    solidLabel.setAttribute("x", geom.topWidth + pad * 0.55);
-    solidLabel.setAttribute("y", geom.cavityHeight + Math.max(28, geom.yMax * 0.2));
-    solidLabel.setAttribute("text-anchor", "middle");
-    solidLabel.setAttribute("dominant-baseline", "middle");
-
-    setPartSize(geom, drawValues.partLength, drawValues.partHeight);
-    setPartPose(
-      {
-        x: geom.entryLeft + Math.min(geom.entryWidth / 2, drawValues.partLength / 2),
-        y: geom.cavityHeight + drawValues.partHeight * 2.5,
-        deg: -28
-      },
-      false
+    const placePose = setPartSize(
+      geom,
+      drawValues.partLength,
+      drawValues.partHeight,
+      drawValues
     );
+    setPartPose(placePose, false);
     drawTravelPath([]);
     showHitMarker(null);
     updateMetrics(rawValues, geom);
@@ -2044,7 +2456,7 @@
       setResultState(
         "ok",
         critical ? "接近临界，可放入" : "可放入",
-        `${C.formatNumber(values.partLength)} x ${C.formatNumber(values.partHeight)} 可从下方开口旋转进入，最终以离顶 ${C.formatNumber(values.topGap)}mm、间隙 ${C.formatNumber(values.clearance)}mm 水平放入。${marginText}`
+        `${C.formatNumber(values.partLength)} x ${C.formatNumber(values.partHeight)} 可从下方开口进入并落位（间隙 ${C.formatNumber(values.clearance)}mm）。${marginText}`
       );
     } else {
       const hit = solveResult.diagnostics.firstHit;
@@ -2057,7 +2469,15 @@
     }
 
     lastSummary = buildSummary(values, solveResult, solveResult.ok ? "可放入" : "不可放入");
-    if (animate) animatePath(lastPath, !solveResult.ok);
+    if (animate && lastPath.length) {
+      animatePath(lastPath, !solveResult.ok);
+    } else {
+      // 改参即时重算：优先最终落位函数（落两侧退台），不用路径网格近似
+      placePartAtFinal(values);
+      if (!solveResult.ok) {
+        part.classList.add("blocked");
+      }
+    }
   }
 
   function buildSummary(values, solveResult, status) {
@@ -2133,7 +2553,7 @@ self.onmessage = function (e) {
     });
 
     const localError = C.validateValues(values);
-    if (localError && !options.light) {
+    if (localError) {
       applySolveResult(
         {
           ok: false,
@@ -2156,8 +2576,10 @@ self.onmessage = function (e) {
       return;
     }
 
-    if (!options.light) {
+    if (!options.quiet) {
       setResultState("wait", "正在计算", "正在按当前尺寸检查旋转路径。");
+    }
+    if (options.animate) {
       validateBtn.disabled = true;
       replayBtn.disabled = true;
     }
@@ -2167,7 +2589,7 @@ self.onmessage = function (e) {
       token,
       request,
       animate: Boolean(options.animate),
-      light: Boolean(options.light)
+      light: false
     };
 
     if (workerReady && worker && options.useWorker !== false) {
@@ -2183,39 +2605,59 @@ self.onmessage = function (e) {
       if (token !== solveToken) return;
       const result = C.solve(request);
       validateBtn.disabled = false;
-      applySolveResult(result, values, { animate: options.animate, light: options.light });
-    }, options.light ? 0 : 20);
+      applySolveResult(result, values, { animate: options.animate, light: false });
+    }, options.animate ? 20 : 0);
   }
 
-  function markPending() {
-    const values = readInputs();
-    updateDiagram(values);
-    setResultState("wait", "待验证", "尺寸已变化，点击验证重新计算。");
-    maxLengthEl.textContent = "--";
-    replayBtn.disabled = true;
-    lastPath = [];
-    lastCanFit = false;
-    lastResult = null;
-    showHitMarker(null);
+  /** 改参即刷新：立即更新图纸，防抖后完整求解（不自动播动画） */
+  function scheduleLiveSolve() {
+    window.clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(function () {
+      runSolve({
+        keepPath: true,
+        estimateMax: true,
+        animate: false,
+        quiet: true,
+        useWorker: true
+      });
+    }, 220);
   }
 
   function runValidation() {
-    runSolve({ keepPath: true, estimateMax: true, animate: true, light: false });
+    runSolve({ keepPath: true, estimateMax: true, animate: true, quiet: false });
   }
 
-  function scheduleLightSolve() {
-    window.clearTimeout(debounceTimer);
-    debounceTimer = window.setTimeout(function () {
-      const values = readInputs();
-      if (C.validateValues(values)) return;
-      runSolve({
-        keepPath: false,
-        estimateMax: true,
-        animate: false,
-        light: true,
-        useWorker: true
+  function setActivePreset(id) {
+    const row = document.getElementById("presetRow");
+    if (!row) return;
+    row.querySelectorAll(".preset-btn").forEach(function (btn) {
+      btn.classList.toggle("is-active", btn.dataset.preset === id);
+    });
+  }
+
+  function applyPreset(preset) {
+    applyValuesToInputs(preset.values);
+    writeUrlState(preset.values);
+    setActivePreset(preset.id);
+    updateDiagram(preset.values);
+    runSolve({ keepPath: true, estimateMax: true, animate: false, quiet: true });
+  }
+
+  function buildPresetButtons() {
+    const row = document.getElementById("presetRow");
+    if (!row) return;
+    row.replaceChildren();
+    PRESETS.forEach(function (preset) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "preset-btn";
+      btn.dataset.preset = preset.id;
+      btn.textContent = preset.label;
+      btn.addEventListener("click", function () {
+        applyPreset(preset);
       });
-    }, 300);
+      row.appendChild(btn);
+    });
   }
 
   function writeUrlState(values) {
@@ -2262,9 +2704,9 @@ self.onmessage = function (e) {
   }
 
   function resetAll() {
-    applyValuesToInputs(C.DEFAULTS);
-    writeUrlState(C.DEFAULTS);
-    runValidation();
+    // 重置为右侧退进默认（DEFAULTS），不是第一个预设
+    const right = PRESETS.find(function (p) { return p.id === "default"; }) || PRESETS[0];
+    applyPreset(right);
   }
 
   async function copyResult() {
@@ -2291,6 +2733,7 @@ self.onmessage = function (e) {
   }
 
   function onInput(changedKey) {
+    cancelPartAnimation();
     const values = readInputs();
     const patch = C.linkedInputPatch(values, changedKey);
     Object.keys(patch).forEach(function (key) {
@@ -2298,12 +2741,19 @@ self.onmessage = function (e) {
     });
     const next = readInputs();
     writeUrlState(next);
-    markPending();
-    scheduleLightSolve();
+    setActivePreset("");
+    // 立即重绘型腔与尺寸，并按新开口中心摆正零件
+    updateDiagram(next);
+    placePartAtFinal(next);
+    scheduleLiveSolve();
   }
 
   Object.keys(inputs).forEach(function (key) {
+    // input：拖动步进时连续刷新；change：失焦/回车再保证一次
     inputs[key].addEventListener("input", function () {
+      onInput(key);
+    });
+    inputs[key].addEventListener("change", function () {
       onInput(key);
     });
   });
@@ -2316,13 +2766,19 @@ self.onmessage = function (e) {
   copyBtn.addEventListener("click", copyResult);
 
   initWorker();
+  buildPresetButtons();
 
   const fromUrl = readUrlState();
-  if (fromUrl) applyValuesToInputs({ ...C.DEFAULTS, ...fromUrl });
-  else applyValuesToInputs(C.DEFAULTS);
+  if (fromUrl) {
+    applyValuesToInputs({ ...C.DEFAULTS, ...fromUrl });
+    setActivePreset("");
+  } else {
+    applyValuesToInputs(C.DEFAULTS);
+    setActivePreset("default"); // 默认高亮「右侧退进」
+  }
 
   updateDiagram(readInputs());
-  runValidation();
+  scheduleLiveSolve();
 })();
 
   </script>

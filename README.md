@@ -19,8 +19,10 @@ open EISV_1.0.html
 
 - 空腔：顶部净宽、开口、左右退进、左右高度、内外圆角半径
 - 零件：长度、高度、离顶距离、安装间隙（二者互相制约：离顶距离须 ≥ 安装间隙）
-- 验证：旋转路径搜索 + 动画；失败时说明干涉原因
-- 辅助：防抖预估、URL 参数、复制结果、Worker 后台计算
+- **改参即重算**；「再次计算」强制重算并播放路径；「重播」仅重放上次动画
+- 预设常见凹位、URL 参数、复制结果、Worker 后台计算
+- 桌面：左图纸固定 / 右表单滚动；手机：表单区横向滑动画板
+- 工程蓝图配色与制图线型
 
 ## 仓库结构（维护用）
 
@@ -31,6 +33,7 @@ open EISV_1.0.html
 | `eisv-app.js` | 界面与应用层源码；组装用 |
 | `scripts/assemble.mjs` | 将 core + app 内联进 HTML |
 | `tests/solve-smoke.mjs` | 核心烟测（Node） |
+| `docs/placement.md` | 最终落位不变量、优先级与改动复盘（改落位前必读） |
 | `LICENSE` | 许可证 |
 | `AGENTS.md` | 协作 / Agent 约定 |
 
@@ -52,6 +55,7 @@ App / View  →  EISV_CORE.solve(request)  →  Space2D + PathSearch
 - `Pose`（v1）：`{ x, y, deg }`
 - 路径搜索只依赖 Space 接口，便于 v2 增加 `Space3D`
 - `request.mode`：`"2d"` 现用，`"3d"` 预留
+- **最终落位**（`finalPlacementPose`：top / step / bridge、对中、有退台不吸顶）见 [`docs/placement.md`](docs/placement.md)
 
 ## 限制
 

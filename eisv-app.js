@@ -27,6 +27,115 @@
     cl: "clearance"
   };
 
+  /** 常见凹位预设（快速调用） */
+  const PRESETS = [
+    {
+      id: "leftInset",
+      label: "左侧退进",
+      values: {
+        topWidth: 212,
+        entryWidth: 192,
+        leftInset: 20,
+        rightInset: 0,
+        leftHeight: 50,
+        rightHeight: 50,
+        leftOuterRadius: 0,
+        leftInnerRadius: 0,
+        rightOuterRadius: 0,
+        rightInnerRadius: 0,
+        partLength: 200,
+        partHeight: 40,
+        topGap: 5,
+        clearance: 0
+      }
+    },
+    {
+      id: "default",
+      label: "右侧退进",
+      values: { ...C.DEFAULTS }
+    },
+    {
+      id: "symmetric",
+      label: "对称退进",
+      values: {
+        topWidth: 300,
+        entryWidth: 260,
+        leftInset: 20,
+        rightInset: 20,
+        leftHeight: 50,
+        rightHeight: 50,
+        leftOuterRadius: 0,
+        leftInnerRadius: 0,
+        rightOuterRadius: 0,
+        rightInnerRadius: 0,
+        partLength: 250,
+        partHeight: 30,
+        topGap: 5,
+        clearance: 0
+      }
+    },
+    {
+      id: "straight",
+      label: "直壁通口",
+      values: {
+        topWidth: 200,
+        entryWidth: 200,
+        leftInset: 0,
+        rightInset: 0,
+        leftHeight: 60,
+        rightHeight: 60,
+        leftOuterRadius: 0,
+        leftInnerRadius: 0,
+        rightOuterRadius: 0,
+        rightInnerRadius: 0,
+        partLength: 180,
+        partHeight: 40,
+        topGap: 1,
+        clearance: 0
+      }
+    },
+    {
+      id: "fillet",
+      label: "圆角收口",
+      values: {
+        topWidth: 300,
+        entryWidth: 260,
+        leftInset: 20,
+        rightInset: 20,
+        leftHeight: 50,
+        rightHeight: 50,
+        leftOuterRadius: 10,
+        leftInnerRadius: 5,
+        rightOuterRadius: 10,
+        rightInnerRadius: 5,
+        partLength: 275,
+        partHeight: 30,
+        topGap: 1,
+        clearance: 0
+      }
+    },
+    {
+      id: "asymmetric",
+      label: "左右不等高",
+      values: {
+        topWidth: 240,
+        entryWidth: 200,
+        leftInset: 10,
+        rightInset: 30,
+        leftHeight: 40,
+        rightHeight: 55,
+        leftOuterRadius: 0,
+        leftInnerRadius: 0,
+        rightOuterRadius: 0,
+        rightInnerRadius: 0,
+        partLength: 190,
+        partHeight: 28,
+        topGap: 5,
+        clearance: 0
+      }
+    }
+  ];
+
   const inputs = {
     topWidth: document.getElementById("topWidthInput"),
     entryWidth: document.getElementById("entryWidthInput"),
@@ -70,7 +179,6 @@
   const partFill = document.getElementById("partFill");
   const partRect = document.getElementById("partRect");
   const partText = document.getElementById("partText");
-  const solidLabel = document.getElementById("solidLabel");
   const hitMarker = document.getElementById("hitMarker");
   const hitDot = document.getElementById("hitDot");
   const hitLabel = document.getElementById("hitLabel");
@@ -150,8 +258,7 @@
       textGap: 2.4 * s,
       topOffset: Math.max(11, pad * 0.4),
       sideOffset: Math.max(10, pad * 0.32),
-      stepOffset: Math.min(16, Math.max(10, pad * 0.36)),
-      hatchPitch: Math.max(3.2, Math.min(6.5, geom.topWidth / 48))
+      stepOffset: Math.min(16, Math.max(10, pad * 0.36))
     };
   }
 
@@ -195,43 +302,74 @@
     textEl.textContent = C.formatNumber(value);
   }
 
-  function updateHatchPitch(pitch) {
-    const pattern = document.getElementById("hatchMetal");
-    const line = document.getElementById("hatchMetalLine");
-    if (!pattern || !line) return;
-    const p = pitch.toFixed(2);
-    pattern.setAttribute("width", p);
-    pattern.setAttribute("height", p);
-    line.setAttribute("y2", p);
-  }
-
   function setPartPose(pose, blocked) {
+    if (!pose) return;
     part.setAttribute("transform", `translate(${pose.x} ${pose.y}) rotate(${pose.deg})`);
     part.classList.toggle("blocked", Boolean(blocked));
   }
 
-  function setPartSize(geom, length, height) {
-    // 零件：直角轮廓 + 浅填充（非剖切体，不打剖面线）
-    partFill.setAttribute("x", String(-length / 2));
-    partFill.setAttribute("y", String(-height / 2));
+  function cancelPartAnimation() {
+    if (animationId != null) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+  }
+
+  /** 按当前输入计算最终落位并立刻摆正零件（改退进/尺寸时即时对中） */
+  function placePartAtFinal(values) {
+    const raw = values || readInputs();
+    const v = C.valuesForDraw(raw);
+    const space = C.createSpace2D(v);
+    const pose = space.finalPlacementPose(
+      { length: v.partLength, height: v.partHeight },
+      { topGap: v.topGap, clearance: v.clearance || 0 }
+    );
+    setPartPose(pose, false);
+    return pose;
+  }
+
+  function setPartSize(geom, length, height, values) {
+    const hx = -length / 2;
+    const hy = -height / 2;
+    partFill.setAttribute("x", String(hx));
+    partFill.setAttribute("y", String(hy));
     partFill.setAttribute("width", String(length));
     partFill.setAttribute("height", String(height));
-    partRect.setAttribute("x", String(-length / 2));
-    partRect.setAttribute("y", String(-height / 2));
+    partRect.setAttribute("x", String(hx));
+    partRect.setAttribute("y", String(hy));
     partRect.setAttribute("width", String(length));
     partRect.setAttribute("height", String(height));
     partText.textContent = `${C.formatNumber(length)}×${C.formatNumber(height)}`;
     partText.setAttribute("font-size", String(Math.max(8, Math.min(12, Math.min(length, height) * 0.28))));
-    const ghostWidth = Math.min(length, geom.topWidth);
-    const openingCenter = geom.entryLeft + geom.entryWidth / 2;
-    const minX = ghostWidth / 2;
-    const maxX = geom.topWidth - ghostWidth / 2;
-    const ghostX = Math.max(minX, Math.min(maxX, openingCenter)) - ghostWidth / 2;
-    // 最终位姿示意：细虚线假想轮廓，与实体同尺寸
-    ghost.setAttribute("x", String(ghostX));
-    ghost.setAttribute("y", String(geom.topGap));
-    ghost.setAttribute("width", String(ghostWidth));
-    ghost.setAttribute("height", String(height));
+
+    const vals = values || {
+      topWidth: geom.topWidth,
+      entryWidth: geom.entryWidth,
+      leftInset: geom.leftInset,
+      rightInset: geom.rightInset,
+      leftHeight: geom.leftHeight,
+      rightHeight: geom.rightHeight,
+      leftOuterRadius: geom.leftOuterRadius,
+      leftInnerRadius: geom.leftInnerRadius,
+      rightOuterRadius: geom.rightOuterRadius,
+      rightInnerRadius: geom.rightInnerRadius,
+      partLength: length,
+      partHeight: height,
+      topGap: geom.topGap,
+      clearance: 0
+    };
+    const pose = C.createSpace2D(vals).finalPlacementPose(
+      { length, height },
+      { topGap: vals.topGap, clearance: vals.clearance || 0 }
+    );
+    if (ghost) {
+      ghost.setAttribute("x", String(hx));
+      ghost.setAttribute("y", String(hy));
+      ghost.setAttribute("width", String(length));
+      ghost.setAttribute("height", String(height));
+      ghost.setAttribute("transform", `translate(${pose.x} ${pose.y}) rotate(${pose.deg})`);
+    }
+    return pose;
   }
 
   function drawTravelPath(path) {
@@ -275,14 +413,21 @@
   }
 
   function animatePath(path, blockedAtEnd) {
-    cancelAnimationFrame(animationId);
+    cancelPartAnimation();
     if (!path.length) return;
 
     const duration = Math.max(1700, Math.min(4300, path.length * 58));
     const delay = 350;
     const startTime = performance.now() + delay;
-
+    // 终点用 finalPlacementPose，避免路径末点网格误差；不在此调用 placePartAtFinal 以免闪到终点
+    const v = C.valuesForDraw(readInputs());
+    const endPose =
+      C.createSpace2D(v).finalPlacementPose(
+        { length: v.partLength, height: v.partHeight },
+        { topGap: v.topGap, clearance: v.clearance || 0 }
+      ) || path[path.length - 1];
     setPartPose(path[0], false);
+
     function tick(now) {
       if (now < startTime) {
         animationId = requestAnimationFrame(tick);
@@ -290,19 +435,26 @@
       }
       const t = Math.min(1, (now - startTime) / duration);
       const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      if (t >= 1) {
+        setPartPose(endPose, blockedAtEnd);
+        animationId = null;
+        return;
+      }
       const rawIndex = eased * (path.length - 1);
       const index = Math.floor(rawIndex);
       const nextIndex = Math.min(path.length - 1, index + 1);
       const localT = rawIndex - index;
       const a = path[index];
       const b = path[nextIndex];
-      const pose = {
-        x: a.x + (b.x - a.x) * localT,
-        y: a.y + (b.y - a.y) * localT,
-        deg: a.deg + (b.deg - a.deg) * localT
-      };
-      setPartPose(pose, blockedAtEnd && t >= 0.98);
-      if (t < 1) animationId = requestAnimationFrame(tick);
+      setPartPose(
+        {
+          x: a.x + (b.x - a.x) * localT,
+          y: a.y + (b.y - a.y) * localT,
+          deg: a.deg + (b.deg - a.deg) * localT
+        },
+        false
+      );
+      animationId = requestAnimationFrame(tick);
     }
 
     animationId = requestAnimationFrame(tick);
@@ -324,6 +476,7 @@
   }
 
   function updateDiagram(rawValues) {
+    cancelPartAnimation();
     const drawValues = C.valuesForDraw(rawValues);
     const geom = C.deriveGeom(drawValues);
     const paths = C.buildCavityPaths(geom);
@@ -334,9 +487,11 @@
     const viewH = geom.yMax + pad * 2;
     diagram.setAttribute("viewBox", `${-pad} ${-pad} ${viewW} ${viewH}`);
 
-    updateHatchPitch(p.hatchPitch);
-
-    wallPath.setAttribute("d", paths.wall);
+    // 取消外围实体阴影；仅腔内浅透明层
+    if (wallPath) {
+      wallPath.setAttribute("d", "");
+      wallPath.setAttribute("visibility", "hidden");
+    }
     cavityFill.setAttribute("d", paths.fill);
     cavityWall.setAttribute("d", paths.stroke);
     openingLine.setAttribute("x1", geom.entryLeft);
@@ -445,22 +600,13 @@
       });
     }
 
-    // 剖面材料标注（非尺寸）
-    solidLabel.textContent = "金属";
-    solidLabel.setAttribute("x", geom.topWidth + pad * 0.55);
-    solidLabel.setAttribute("y", geom.cavityHeight + Math.max(28, geom.yMax * 0.2));
-    solidLabel.setAttribute("text-anchor", "middle");
-    solidLabel.setAttribute("dominant-baseline", "middle");
-
-    setPartSize(geom, drawValues.partLength, drawValues.partHeight);
-    setPartPose(
-      {
-        x: geom.entryLeft + Math.min(geom.entryWidth / 2, drawValues.partLength / 2),
-        y: geom.cavityHeight + drawValues.partHeight * 2.5,
-        deg: -28
-      },
-      false
+    const placePose = setPartSize(
+      geom,
+      drawValues.partLength,
+      drawValues.partHeight,
+      drawValues
     );
+    setPartPose(placePose, false);
     drawTravelPath([]);
     showHitMarker(null);
     updateMetrics(rawValues, geom);
@@ -526,7 +672,7 @@
       setResultState(
         "ok",
         critical ? "接近临界，可放入" : "可放入",
-        `${C.formatNumber(values.partLength)} x ${C.formatNumber(values.partHeight)} 可从下方开口旋转进入，最终以离顶 ${C.formatNumber(values.topGap)}mm、间隙 ${C.formatNumber(values.clearance)}mm 水平放入。${marginText}`
+        `${C.formatNumber(values.partLength)} x ${C.formatNumber(values.partHeight)} 可从下方开口进入并落位（间隙 ${C.formatNumber(values.clearance)}mm）。${marginText}`
       );
     } else {
       const hit = solveResult.diagnostics.firstHit;
@@ -539,7 +685,15 @@
     }
 
     lastSummary = buildSummary(values, solveResult, solveResult.ok ? "可放入" : "不可放入");
-    if (animate) animatePath(lastPath, !solveResult.ok);
+    if (animate && lastPath.length) {
+      animatePath(lastPath, !solveResult.ok);
+    } else {
+      // 改参即时重算：优先最终落位函数（落两侧退台），不用路径网格近似
+      placePartAtFinal(values);
+      if (!solveResult.ok) {
+        part.classList.add("blocked");
+      }
+    }
   }
 
   function buildSummary(values, solveResult, status) {
@@ -615,7 +769,7 @@ self.onmessage = function (e) {
     });
 
     const localError = C.validateValues(values);
-    if (localError && !options.light) {
+    if (localError) {
       applySolveResult(
         {
           ok: false,
@@ -638,8 +792,10 @@ self.onmessage = function (e) {
       return;
     }
 
-    if (!options.light) {
+    if (!options.quiet) {
       setResultState("wait", "正在计算", "正在按当前尺寸检查旋转路径。");
+    }
+    if (options.animate) {
       validateBtn.disabled = true;
       replayBtn.disabled = true;
     }
@@ -649,7 +805,7 @@ self.onmessage = function (e) {
       token,
       request,
       animate: Boolean(options.animate),
-      light: Boolean(options.light)
+      light: false
     };
 
     if (workerReady && worker && options.useWorker !== false) {
@@ -665,39 +821,59 @@ self.onmessage = function (e) {
       if (token !== solveToken) return;
       const result = C.solve(request);
       validateBtn.disabled = false;
-      applySolveResult(result, values, { animate: options.animate, light: options.light });
-    }, options.light ? 0 : 20);
+      applySolveResult(result, values, { animate: options.animate, light: false });
+    }, options.animate ? 20 : 0);
   }
 
-  function markPending() {
-    const values = readInputs();
-    updateDiagram(values);
-    setResultState("wait", "待验证", "尺寸已变化，点击验证重新计算。");
-    maxLengthEl.textContent = "--";
-    replayBtn.disabled = true;
-    lastPath = [];
-    lastCanFit = false;
-    lastResult = null;
-    showHitMarker(null);
+  /** 改参即刷新：立即更新图纸，防抖后完整求解（不自动播动画） */
+  function scheduleLiveSolve() {
+    window.clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(function () {
+      runSolve({
+        keepPath: true,
+        estimateMax: true,
+        animate: false,
+        quiet: true,
+        useWorker: true
+      });
+    }, 220);
   }
 
   function runValidation() {
-    runSolve({ keepPath: true, estimateMax: true, animate: true, light: false });
+    runSolve({ keepPath: true, estimateMax: true, animate: true, quiet: false });
   }
 
-  function scheduleLightSolve() {
-    window.clearTimeout(debounceTimer);
-    debounceTimer = window.setTimeout(function () {
-      const values = readInputs();
-      if (C.validateValues(values)) return;
-      runSolve({
-        keepPath: false,
-        estimateMax: true,
-        animate: false,
-        light: true,
-        useWorker: true
+  function setActivePreset(id) {
+    const row = document.getElementById("presetRow");
+    if (!row) return;
+    row.querySelectorAll(".preset-btn").forEach(function (btn) {
+      btn.classList.toggle("is-active", btn.dataset.preset === id);
+    });
+  }
+
+  function applyPreset(preset) {
+    applyValuesToInputs(preset.values);
+    writeUrlState(preset.values);
+    setActivePreset(preset.id);
+    updateDiagram(preset.values);
+    runSolve({ keepPath: true, estimateMax: true, animate: false, quiet: true });
+  }
+
+  function buildPresetButtons() {
+    const row = document.getElementById("presetRow");
+    if (!row) return;
+    row.replaceChildren();
+    PRESETS.forEach(function (preset) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "preset-btn";
+      btn.dataset.preset = preset.id;
+      btn.textContent = preset.label;
+      btn.addEventListener("click", function () {
+        applyPreset(preset);
       });
-    }, 300);
+      row.appendChild(btn);
+    });
   }
 
   function writeUrlState(values) {
@@ -744,9 +920,9 @@ self.onmessage = function (e) {
   }
 
   function resetAll() {
-    applyValuesToInputs(C.DEFAULTS);
-    writeUrlState(C.DEFAULTS);
-    runValidation();
+    // 重置为右侧退进默认（DEFAULTS），不是第一个预设
+    const right = PRESETS.find(function (p) { return p.id === "default"; }) || PRESETS[0];
+    applyPreset(right);
   }
 
   async function copyResult() {
@@ -773,6 +949,7 @@ self.onmessage = function (e) {
   }
 
   function onInput(changedKey) {
+    cancelPartAnimation();
     const values = readInputs();
     const patch = C.linkedInputPatch(values, changedKey);
     Object.keys(patch).forEach(function (key) {
@@ -780,12 +957,19 @@ self.onmessage = function (e) {
     });
     const next = readInputs();
     writeUrlState(next);
-    markPending();
-    scheduleLightSolve();
+    setActivePreset("");
+    // 立即重绘型腔与尺寸，并按新开口中心摆正零件
+    updateDiagram(next);
+    placePartAtFinal(next);
+    scheduleLiveSolve();
   }
 
   Object.keys(inputs).forEach(function (key) {
+    // input：拖动步进时连续刷新；change：失焦/回车再保证一次
     inputs[key].addEventListener("input", function () {
+      onInput(key);
+    });
+    inputs[key].addEventListener("change", function () {
       onInput(key);
     });
   });
@@ -798,11 +982,17 @@ self.onmessage = function (e) {
   copyBtn.addEventListener("click", copyResult);
 
   initWorker();
+  buildPresetButtons();
 
   const fromUrl = readUrlState();
-  if (fromUrl) applyValuesToInputs({ ...C.DEFAULTS, ...fromUrl });
-  else applyValuesToInputs(C.DEFAULTS);
+  if (fromUrl) {
+    applyValuesToInputs({ ...C.DEFAULTS, ...fromUrl });
+    setActivePreset("");
+  } else {
+    applyValuesToInputs(C.DEFAULTS);
+    setActivePreset("default"); // 默认高亮「右侧退进」
+  }
 
   updateDiagram(readInputs());
-  runValidation();
+  scheduleLiveSolve();
 })();
