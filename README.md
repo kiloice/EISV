@@ -2,6 +2,12 @@
 
 离线单页工具：在浏览器里用 **二维剖面** 近似验证矩形件能否从下方开口旋转装入凹腔，并估算最大可放长度。
 
+源码仓库：<https://github.com/kiloice/EISV.git>
+
+```bash
+git clone https://github.com/kiloice/EISV.git
+```
+
 ## 使用者
 
 只需 **一个文件**：
