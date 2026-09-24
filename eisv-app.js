@@ -168,7 +168,6 @@
   const copyBtn = document.getElementById("copyBtn");
 
   const diagram = document.getElementById("diagram");
-  const wallPath = document.getElementById("wallPath");
   const cavityFill = document.getElementById("cavityFill");
   const cavityWall = document.getElementById("cavityWall");
   const openingLine = document.getElementById("openingLine");
@@ -209,6 +208,8 @@
   let lastResult = null;
   let animationId = null;
   let activeGeom = null;
+  /** 当前图纸参数下的最终落位（每次 updateDiagram 只算一次） */
+  let activeFinalPose = null;
   let solveToken = 0;
   let debounceTimer = null;
   let worker = null;
@@ -315,60 +316,26 @@
     }
   }
 
-  /** 按当前输入计算最终落位并立刻摆正零件（改退进/尺寸时即时对中） */
-  function placePartAtFinal(values) {
-    const raw = values || readInputs();
-    const v = C.valuesForDraw(raw);
-    const space = C.createSpace2D(v);
-    const pose = space.finalPlacementPose(
-      { length: v.partLength, height: v.partHeight },
-      { topGap: v.topGap, clearance: v.clearance || 0 }
-    );
-    setPartPose(pose, false);
-    return pose;
-  }
-
-  function setPartSize(geom, length, height, values) {
+  /** 设置零件尺寸并按最终落位摆放幽灵框；返回最终位姿 */
+  function setPartSize(values) {
+    const length = values.partLength;
+    const height = values.partHeight;
     const hx = -length / 2;
     const hy = -height / 2;
-    partFill.setAttribute("x", String(hx));
-    partFill.setAttribute("y", String(hy));
-    partFill.setAttribute("width", String(length));
-    partFill.setAttribute("height", String(height));
-    partRect.setAttribute("x", String(hx));
-    partRect.setAttribute("y", String(hy));
-    partRect.setAttribute("width", String(length));
-    partRect.setAttribute("height", String(height));
+    [partFill, partRect, ghost].forEach(function (el) {
+      el.setAttribute("x", String(hx));
+      el.setAttribute("y", String(hy));
+      el.setAttribute("width", String(length));
+      el.setAttribute("height", String(height));
+    });
     partText.textContent = `${C.formatNumber(length)}×${C.formatNumber(height)}`;
     partText.setAttribute("font-size", String(Math.max(8, Math.min(12, Math.min(length, height) * 0.28))));
 
-    const vals = values || {
-      topWidth: geom.topWidth,
-      entryWidth: geom.entryWidth,
-      leftInset: geom.leftInset,
-      rightInset: geom.rightInset,
-      leftHeight: geom.leftHeight,
-      rightHeight: geom.rightHeight,
-      leftOuterRadius: geom.leftOuterRadius,
-      leftInnerRadius: geom.leftInnerRadius,
-      rightOuterRadius: geom.rightOuterRadius,
-      rightInnerRadius: geom.rightInnerRadius,
-      partLength: length,
-      partHeight: height,
-      topGap: geom.topGap,
-      clearance: 0
-    };
-    const pose = C.createSpace2D(vals).finalPlacementPose(
+    const pose = C.createSpace2D(values).finalPlacementPose(
       { length, height },
-      { topGap: vals.topGap, clearance: vals.clearance || 0 }
+      { topGap: values.topGap, clearance: values.clearance || 0 }
     );
-    if (ghost) {
-      ghost.setAttribute("x", String(hx));
-      ghost.setAttribute("y", String(hy));
-      ghost.setAttribute("width", String(length));
-      ghost.setAttribute("height", String(height));
-      ghost.setAttribute("transform", `translate(${pose.x} ${pose.y}) rotate(${pose.deg})`);
-    }
+    ghost.setAttribute("transform", `translate(${pose.x} ${pose.y}) rotate(${pose.deg})`);
     return pose;
   }
 
@@ -419,13 +386,8 @@
     const duration = Math.max(1700, Math.min(4300, path.length * 58));
     const delay = 350;
     const startTime = performance.now() + delay;
-    // 终点用 finalPlacementPose，避免路径末点网格误差；不在此调用 placePartAtFinal 以免闪到终点
-    const v = C.valuesForDraw(readInputs());
-    const endPose =
-      C.createSpace2D(v).finalPlacementPose(
-        { length: v.partLength, height: v.partHeight },
-        { topGap: v.topGap, clearance: v.clearance || 0 }
-      ) || path[path.length - 1];
+    // 终点用 finalPlacementPose（updateDiagram 已算好），避免路径末点网格误差
+    const endPose = activeFinalPose || path[path.length - 1];
     setPartPose(path[0], false);
 
     function tick(now) {
@@ -487,11 +449,6 @@
     const viewH = geom.yMax + pad * 2;
     diagram.setAttribute("viewBox", `${-pad} ${-pad} ${viewW} ${viewH}`);
 
-    // 取消外围实体阴影；仅腔内浅透明层
-    if (wallPath) {
-      wallPath.setAttribute("d", "");
-      wallPath.setAttribute("visibility", "hidden");
-    }
     cavityFill.setAttribute("d", paths.fill);
     cavityWall.setAttribute("d", paths.stroke);
     openingLine.setAttribute("x1", geom.entryLeft);
@@ -602,13 +559,8 @@
       });
     }
 
-    const placePose = setPartSize(
-      geom,
-      drawValues.partLength,
-      drawValues.partHeight,
-      drawValues
-    );
-    setPartPose(placePose, false);
+    activeFinalPose = setPartSize(drawValues);
+    setPartPose(activeFinalPose, false);
     drawTravelPath([]);
     showHitMarker(null);
     updateMetrics(rawValues, geom);
@@ -617,7 +569,6 @@
   function applySolveResult(solveResult, values, opts) {
     lastResult = solveResult;
     const animate = opts && opts.animate;
-    const light = opts && opts.light;
 
     if (solveResult.error) {
       setResultState("fail", "尺寸有误", solveResult.error);
@@ -633,27 +584,6 @@
 
     if (solveResult.maxLength != null) {
       maxLengthEl.textContent = `约 ${solveResult.maxLength.toFixed(1)} mm`;
-    }
-
-    if (light) {
-      if (solveResult.ok) {
-        const margin = solveResult.diagnostics.margin;
-        const marginText = margin != null ? `余量约 ${C.formatNumber(margin)} mm。` : "";
-        setResultState(
-          "wait",
-          "预估可放",
-          `轻量预检通过。最大约 ${solveResult.maxLength != null ? solveResult.maxLength.toFixed(1) : "--"} mm。${marginText}点击验证查看路径动画。`
-        );
-      } else {
-        setResultState(
-          "wait",
-          "预估紧张",
-          "轻量预检未找到路径。点击验证做完整搜索并查看干涉位置。"
-        );
-      }
-      lastSummary = buildSummary(values, solveResult, "预检");
-      copyBtn.disabled = false;
-      return;
     }
 
     lastPath = solveResult.path || [];
@@ -690,11 +620,8 @@
     if (animate && lastPath.length) {
       animatePath(lastPath, !solveResult.ok);
     } else {
-      // 改参即时重算：优先最终落位函数（落两侧退台），不用路径网格近似
-      placePartAtFinal(values);
-      if (!solveResult.ok) {
-        part.classList.add("blocked");
-      }
+      // 改参即时重算：零件停在最终落位（不用路径网格近似）
+      setPartPose(activeFinalPose, !solveResult.ok);
     }
   }
 
@@ -806,7 +733,6 @@ self.onmessage = function (e) {
   function runSolve(options) {
     cancelPendingSolve();
     const values = readInputs();
-    updateDiagram(values);
     const request = C.buildSolveRequest(values, {
       keepPath: Boolean(options.keepPath),
       estimateMax: options.estimateMax !== false
@@ -981,18 +907,17 @@ self.onmessage = function (e) {
     const next = readInputs();
     writeUrlState(next);
     setActivePreset("");
+    // 旧路径属于旧尺寸，不可重播
+    lastPath = [];
+    replayBtn.disabled = true;
     // 立即重绘型腔与尺寸，并按新开口中心摆正零件
     updateDiagram(next);
-    placePartAtFinal(next);
     scheduleLiveSolve();
   }
 
   Object.keys(inputs).forEach(function (key) {
-    // input：拖动步进时连续刷新；change：失焦/回车再保证一次
+    // input 已覆盖键入、步进与粘贴；再监听 change 会重复处理同一次编辑
     inputs[key].addEventListener("input", function () {
-      onInput(key);
-    });
-    inputs[key].addEventListener("change", function () {
       onInput(key);
     });
   });

@@ -395,13 +395,6 @@ const html = `<!doctype html>
       stroke-linecap: round;
     }
 
-    /* 外围实体阴影已取消 */
-    .wall {
-      fill: none;
-      stroke: none;
-      display: none;
-    }
-
     /* 仅空腔内部淡透明层，区分内外 */
     .cavity-fill {
       fill: var(--cavity-wash);
@@ -605,7 +598,6 @@ const html = `<!doctype html>
               </marker>
             </defs>
 
-            <path id="wallPath" class="wall" fill-rule="evenodd"></path>
             <path id="cavityFill" class="cavity-fill"></path>
             <path id="cavityWall" class="cavity-wall draft-thick"></path>
             <line id="openingLine" class="opening-line draft-dash"></line>

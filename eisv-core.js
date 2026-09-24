@@ -203,7 +203,6 @@
       partLength: values.partLength,
       partHeight: values.partHeight,
       topGap: values.topGap,
-      stepWidth: values.rightInset,
       yMax,
       grid,
       angleStep: grid > 1 ? 2 : 1,
@@ -233,10 +232,7 @@
 
     const fill = `M 0 0 H ${geom.topWidth} ${rightOuter} ${rightInner} V ${geom.yMax} H ${geom.entryLeft} ${leftInner} ${leftOuter} V 0 Z`;
     const stroke = `M ${geom.entryLeft} ${geom.yMax} ${leftInner} ${leftOuter} V 0 H ${geom.topWidth} ${rightOuter} ${rightInner} V ${geom.yMax}`;
-    // wall 路径保留兼容，UI 已改为腔内 wash、不再画外围实体阴影
-    const pad = Math.max(30, geom.topWidth * 0.14);
-    const wall = "";
-    return { fill, stroke, wall, pad };
+    return { fill, stroke };
   }
 
   function xMinAt(geom, y) {
@@ -313,7 +309,6 @@
 
   function createSpace2D(values) {
     const geom = deriveGeom(values);
-    const partTemplate = { length: values.partLength, height: values.partHeight };
 
     function pointFree(x, y, c) {
       if (y < -0.001 + c) return false;
@@ -710,7 +705,6 @@
     return {
       mode: "2d",
       geom,
-      partTemplate,
       paths: buildCavityPaths(geom),
       validPose,
       isEntryPose,
@@ -745,7 +739,7 @@
     const geomTop = space.geom ? space.geom.topWidth : Infinity;
 
     if (part.length > geomTop) {
-      const hint = space.failHintPath(part, options);
+      const hint = space.failHintPath(part);
       const hitPose = hint[hint.length - 1] || { x: 0, y: 0, deg: 0 };
       return {
         ok: false,
@@ -905,7 +899,7 @@
       }
     }
 
-    const hint = space.failHintPath(part, options);
+    const hint = space.failHintPath(part);
     let firstHit = null;
     for (let i = hint.length - 1; i >= 0; i -= 1) {
       firstHit = space.findFirstHit(part, hint[i], clearance);
@@ -999,7 +993,7 @@
     if (pathResult.ok) {
       path = options.keepPath ? downsamplePath(pathResult.path) : pathResult.path;
     } else if (options.keepPath) {
-      path = space.failHintPath(part, { topGap, clearance });
+      path = space.failHintPath(part);
     }
 
     const margin =
