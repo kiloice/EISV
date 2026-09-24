@@ -1550,7 +1550,8 @@
     }
 
     const queue = [];
-    const seen = new Set();
+    // 状态数可达数百万：用定长位图代替 Set
+    const seen = new Uint8Array(nCell * angles.length);
     const parent = keepParents ? new Map() : null;
     const { finalPose, centers } = space.seedFinalCenters(part, { topGap, clearance });
 
@@ -1590,11 +1591,11 @@
       if (ix < 0 || ix >= gridXCount || iy < 0 || iy >= gridYCount) return;
       if (ia < 0 || ia >= angles.length) return;
       const sk = stateKey(ix, iy, ia);
-      if (seen.has(sk)) return;
+      if (seen[sk]) return;
       const p = poseOf(ix, iy, ia);
       if (!space.validPose(part, p, clearance)) return;
       if (!motionFree(p, finalPose)) return;
-      seen.add(sk);
+      seen[sk] = 1;
       queue.push(sk);
       if (parent) parent.set(sk, -1);
     }
@@ -1664,10 +1665,10 @@
           continue;
         }
         const nsk = stateKey(nix, niy, nia);
-        if (seen.has(nsk)) continue;
+        if (seen[nsk]) continue;
         const next = poseOf(nix, niy, nia);
         if (!space.validPose(part, next, clearance)) continue;
-        seen.add(nsk);
+        seen[nsk] = 1;
         queue.push(nsk);
         if (parent) parent.set(nsk, sk);
       }
@@ -1701,20 +1702,6 @@
       else high = mid;
     }
     return Math.floor(low * 10) / 10;
-  }
-
-  /**
-   * Optional two-phase: coarse probe then fine path when keepPath.
-   */
-  function findPathWithRefine(space, part, options) {
-    if (!options.keepPath) {
-      return findPath(space, part, options);
-    }
-    const coarse = findPath(space, part, { ...options, keepPath: false, gridScale: 2 });
-    if (!coarse.ok) {
-      return findPath(space, part, { ...options, gridScale: 1 });
-    }
-    return findPath(space, part, { ...options, gridScale: 1 });
   }
 
   /** 统一的失败结果（参数错误 / 模式未实现） */
@@ -1775,9 +1762,7 @@
       maxLength = estimateMaxLength(space, part.height, { clearance, topGap });
     }
 
-    const pathResult = options.keepPath
-      ? findPathWithRefine(space, part, { clearance, topGap, keepPath: true })
-      : findPath(space, part, { clearance, topGap, keepPath: false });
+    const pathResult = findPath(space, part, { clearance, topGap, keepPath: Boolean(options.keepPath) });
 
     let path = [];
     if (pathResult.ok) {
