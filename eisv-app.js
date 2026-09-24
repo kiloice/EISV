@@ -199,6 +199,7 @@
   const entryDimText = document.getElementById("entryDimText");
   const depthDimText = document.getElementById("depthDimText");
   const leftHeightDimText = document.getElementById("leftHeightDimText");
+  const stepDim = document.getElementById("stepDim");
   const stepDimText = document.getElementById("stepDimText");
   const leftStepDim = document.getElementById("leftStepDim");
   const leftStepDimText = document.getElementById("leftStepDimText");
@@ -211,7 +212,6 @@
   let solveToken = 0;
   let debounceTimer = null;
   let worker = null;
-  let workerReady = false;
   let lastSummary = "";
 
   function num(input) {
@@ -564,22 +564,24 @@
       p
     });
 
-    // 右侧退进
-    const stepDimY = geom.rightHeight + p.stepOffset;
-    placeHorizontalDim({
-      x1: geom.entryRight,
-      x2: geom.topWidth,
-      y1: geom.rightHeight,
-      y2: geom.rightHeight,
-      dimY: stepDimY,
-      side: "down",
-      helpL: "stepDimHelpLeft",
-      helpR: "stepDimHelpRight",
-      dimId: "stepDimLine",
-      textEl: stepDimText,
-      value: geom.stepWidth,
-      p
-    });
+    // 右侧退进（为 0 时与左侧一致，隐藏标注）
+    stepDim.style.display = geom.rightInset > 0.001 ? "" : "none";
+    if (geom.rightInset > 0.001) {
+      placeHorizontalDim({
+        x1: geom.entryRight,
+        x2: geom.topWidth,
+        y1: geom.rightHeight,
+        y2: geom.rightHeight,
+        dimY: geom.rightHeight + p.stepOffset,
+        side: "down",
+        helpL: "stepDimHelpLeft",
+        helpR: "stepDimHelpRight",
+        dimId: "stepDimLine",
+        textEl: stepDimText,
+        value: geom.rightInset,
+        p
+      });
+    }
 
     leftStepDim.style.display = geom.leftInset > 0.001 ? "" : "none";
     if (geom.leftInset > 0.001) {
@@ -719,11 +721,31 @@
     return lines.join("\n");
   }
 
-  function initWorker() {
+  let workerSource = "";
+  let workerDisabled = false;
+  /** 正在 Worker 中计算的任务：{ token, request, values, animate } */
+  let pendingJob = null;
+
+  function createWorker() {
+    if (workerDisabled || !workerSource) return null;
     try {
-      const coreEl = document.getElementById("eisv-core");
-      if (!coreEl) return;
-      const workerSource = `${coreEl.textContent}
+      const blob = new Blob([workerSource], { type: "application/javascript" });
+      const url = URL.createObjectURL(blob);
+      const w = new Worker(url);
+      URL.revokeObjectURL(url);
+      w.onmessage = onWorkerMessage;
+      w.onerror = onWorkerError;
+      return w;
+    } catch (err) {
+      workerDisabled = true;
+      return null;
+    }
+  }
+
+  function initWorker() {
+    const coreEl = document.getElementById("eisv-core");
+    if (!coreEl) return;
+    workerSource = `${coreEl.textContent}
 self.onmessage = function (e) {
   var data = e.data || {};
   try {
@@ -734,33 +756,55 @@ self.onmessage = function (e) {
   }
 };
 `;
-      const blob = new Blob([workerSource], { type: "application/javascript" });
-      const url = URL.createObjectURL(blob);
-      worker = new Worker(url);
-      URL.revokeObjectURL(url);
-      worker.onmessage = function (e) {
-        const data = e.data || {};
-        if (data.token !== solveToken) return;
-        validateBtn.disabled = false;
-        if (!data.ok) {
-          setResultState("fail", "计算失败", data.error || "Worker 异常");
-          return;
-        }
-        const values = readInputs();
-        applySolveResult(data.result, values, { animate: data.animate, light: data.light });
-      };
-      worker.onerror = function () {
-        worker = null;
-        workerReady = false;
-      };
-      workerReady = true;
-    } catch (err) {
-      worker = null;
-      workerReady = false;
+    worker = createWorker();
+  }
+
+  /** 丢弃进行中的计算：Worker 无法中断单次 solve，只能终止重建 */
+  function cancelPendingSolve() {
+    solveToken += 1;
+    if (pendingJob && worker) {
+      worker.terminate();
+      worker = createWorker();
     }
+    pendingJob = null;
+    validateBtn.disabled = false;
+  }
+
+  function onWorkerMessage(e) {
+    const data = e.data || {};
+    const job = pendingJob;
+    if (!job || data.token !== job.token || job.token !== solveToken) return;
+    pendingJob = null;
+    validateBtn.disabled = false;
+    if (!data.ok) {
+      setResultState("fail", "计算失败", data.error || "Worker 异常");
+      return;
+    }
+    applySolveResult(data.result, job.values, { animate: job.animate });
+  }
+
+  function onWorkerError(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    const job = pendingJob;
+    pendingJob = null;
+    if (worker) worker.terminate();
+    worker = null;
+    workerDisabled = true;
+    // 未完成的任务改在主线程重算，避免按钮卡在禁用、结果停在「正在计算」
+    if (job && job.token === solveToken) solveOnMainThread(job);
+  }
+
+  function solveOnMainThread(job) {
+    window.setTimeout(function () {
+      if (job.token !== solveToken) return;
+      const solved = C.solve(job.request);
+      validateBtn.disabled = false;
+      applySolveResult(solved, job.values, { animate: job.animate });
+    }, job.animate ? 20 : 0);
   }
 
   function runSolve(options) {
+    cancelPendingSolve();
     const values = readInputs();
     updateDiagram(values);
     const request = C.buildSolveRequest(values, {
@@ -770,25 +814,8 @@ self.onmessage = function (e) {
 
     const localError = C.validateValues(values);
     if (localError) {
-      applySolveResult(
-        {
-          ok: false,
-          mode: "2d",
-          path: [],
-          maxLength: null,
-          error: localError,
-          diagnostics: {
-            grid: 0,
-            angleStep: 0,
-            clearance: values.clearance,
-            margin: null,
-            firstHit: null,
-            warnings: []
-          }
-        },
-        values,
-        { animate: false }
-      );
+      validateBtn.disabled = false;
+      applySolveResult(C.errorResult(localError, values.clearance), values, { animate: false });
       return;
     }
 
@@ -800,29 +827,23 @@ self.onmessage = function (e) {
       replayBtn.disabled = true;
     }
 
-    const token = ++solveToken;
-    const payload = {
-      token,
+    const job = {
+      token: solveToken,
       request,
-      animate: Boolean(options.animate),
-      light: false
+      values,
+      animate: Boolean(options.animate)
     };
 
-    if (workerReady && worker && options.useWorker !== false) {
+    if (worker) {
       try {
-        worker.postMessage(payload);
+        pendingJob = job;
+        worker.postMessage({ token: job.token, request });
         return;
       } catch (err) {
-        /* fall through */
+        pendingJob = null;
       }
     }
-
-    window.setTimeout(function () {
-      if (token !== solveToken) return;
-      const result = C.solve(request);
-      validateBtn.disabled = false;
-      applySolveResult(result, values, { animate: options.animate, light: false });
-    }, options.animate ? 20 : 0);
+    solveOnMainThread(job);
   }
 
   /** 改参即刷新：立即更新图纸，防抖后完整求解（不自动播动画） */
@@ -833,8 +854,7 @@ self.onmessage = function (e) {
         keepPath: true,
         estimateMax: true,
         animate: false,
-        quiet: true,
-        useWorker: true
+        quiet: true
       });
     }, 220);
   }
@@ -944,12 +964,15 @@ self.onmessage = function (e) {
         copyBtn.textContent = prev;
       }, 1200);
     } catch (err) {
-      setResultState("wait", resultTitle.textContent, "复制失败，请手动选择结果文本。");
+      const kind = ["ok", "fail", "wait"].find(function (k) { return result.classList.contains(k); }) || "wait";
+      setResultState(kind, resultTitle.textContent, "复制失败，请手动选择结果文本。");
     }
   }
 
   function onInput(changedKey) {
     cancelPartAnimation();
+    // 旧参数的结果不再适用：作废进行中的计算，避免旧结果配新参数显示
+    cancelPendingSolve();
     const values = readInputs();
     const patch = C.linkedInputPatch(values, changedKey);
     Object.keys(patch).forEach(function (key) {
@@ -986,7 +1009,14 @@ self.onmessage = function (e) {
 
   const fromUrl = readUrlState();
   if (fromUrl) {
-    applyValuesToInputs({ ...C.DEFAULTS, ...fromUrl });
+    const merged = { ...C.DEFAULTS, ...fromUrl };
+    // URL 只带部分参数时，按联动规则补全开口/右退进，避免与默认值组合出矛盾尺寸
+    if (!("entryWidth" in fromUrl)) {
+      Object.assign(merged, C.linkedInputPatch(merged, "rightInset"));
+    } else if (!("rightInset" in fromUrl)) {
+      Object.assign(merged, C.linkedInputPatch(merged, "entryWidth"));
+    }
+    applyValuesToInputs(merged);
     setActivePreset("");
   } else {
     applyValuesToInputs(C.DEFAULTS);

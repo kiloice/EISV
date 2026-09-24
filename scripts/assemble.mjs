@@ -774,7 +774,7 @@ const html = `<!doctype html>
 
     <footer class="app-footer">
       <span>EISV · Engineering Installation Simulation Validator</span>
-      <span>Author Tony.D · © 2026 · MIT License</span>
+      <span>Author Tony.D · © 2026 · GPL-3.0 License</span>
     </footer>
   </div>
 

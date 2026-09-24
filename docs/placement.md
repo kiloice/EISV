@@ -25,7 +25,7 @@
 | mode | 条件 | 行为 |
 |------|------|------|
 | `top` | 左右退进皆为 0（直壁） | 吸顶；`x` = 开口中心 |
-| `step` | 有退台且左右等高，或无法斜担 | 水平落在较矮（或等高）退台；`x` 优先开口中心 |
+| `step` | 有退台且左右等高，或无法斜担 | 水平落在较矮（或等高）退台；经 `validPose`（含安装间隙）过滤后 `x` 优先开口中心 |
 | `bridge` | 有退台且左右不等高，且件长足够 | 斜担；见下节 |
 
 **硬规则：** 只要存在退进（`leftInset` 或 `rightInset` > 0），fallback **只能是 `step`，禁止 `top`**。  
@@ -79,7 +79,8 @@ else fallback → step（矮台 + 对中）
 2. `node tests/solve-smoke.mjs`（含 bridge 对中、窄退进、有退台非 top）  
 3. `node scripts/assemble.mjs`  
 4. 浏览器确认标题版本号；必要时 dump `#part` 的 `transform` 或截图  
-5. 动画终点须用 `finalPlacementPose`，不信任路径网格末点  
+5. 动画终点须用 `finalPlacementPose`，不信任路径网格末点
+6. 路径搜索只从「能直线无碰撞过渡到 `finalPlacementPose`」的网格种子出发；`finalPlacementPose` 本身不合法时判为不可放入，不再把末点直接替换成它（旧实现会掩盖落位 bug，例如等高退台 + 安装间隙时贴墙）  
 
 建议锁定的用户几何（烟测已部分覆盖）：
 

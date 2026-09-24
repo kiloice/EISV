@@ -50,19 +50,19 @@
       return Math.min(v, 800);
     }
     const topWidth = pos(values.topWidth, d.topWidth);
-    const leftInset = nonNeg(values.leftInset, d.leftInset);
-    const rightInset = nonNeg(values.rightInset, d.rightInset);
-    let entryWidth = pos(values.entryWidth, d.entryWidth);
-    if (leftInset + rightInset < topWidth) {
-      entryWidth = topWidth - leftInset - rightInset;
-    } else {
-      entryWidth = Math.max(1, topWidth * 0.5);
+    let leftInset = nonNeg(values.leftInset, d.leftInset);
+    let rightInset = nonNeg(values.rightInset, d.rightInset);
+    // 只有退进之和不合法时才截断，合法输入必须按原尺寸绘制（与求解几何一致）
+    if (leftInset + rightInset >= topWidth) {
+      leftInset = Math.min(leftInset, topWidth * 0.45);
+      rightInset = Math.min(rightInset, topWidth * 0.45);
     }
+    const entryWidth = topWidth - leftInset - rightInset;
     return {
       topWidth,
       entryWidth,
-      leftInset: Math.min(leftInset, topWidth * 0.45),
-      rightInset: Math.min(rightInset, topWidth * 0.45),
+      leftInset,
+      rightInset,
       leftHeight: pos(values.leftHeight, d.leftHeight),
       rightHeight: pos(values.rightHeight, d.rightHeight),
       leftOuterRadius: nonNeg(values.leftOuterRadius, 0),
@@ -421,9 +421,8 @@
     /**
      * 最终落位（分层）：
      * 1 无退台 → top 吸顶对中
-     * 2 等高退台 → step 水平对中
-     * 3 不等高 → bridge：浅侧内角 + 深侧台面；深侧触点扫描，可行域内 |cx−开口中心| 最小
-     * 4 否则 → 较矮一侧 step，仍优先对中（有退台不吸顶）
+     * 2 不等高 → bridge：浅侧内角 + 深侧台面；深侧触点扫描，可行域内 |cx−开口中心| 最小
+     * 3 等高或无法斜担 → 较矮（等高）一侧 step，经碰撞校验后仍优先对中（有退台不吸顶）
      */
     function finalPlacementPose(part, options) {
       const clearance = options.clearance || 0;
@@ -486,22 +485,13 @@
       // 1) 直壁
       if (geom.leftInset <= 0.001 && geom.rightInset <= 0.001) {
         const gap = Number.isFinite(topGapRaw) ? topGapRaw : 1;
-        return pack("top", { x: clampX(openingCenter), y: gap + halfH, deg: 0 }, { derivedTopGap: gap });
+        const x = Math.max(halfL + clearance, Math.min(topW - halfL - clearance, openingCenter));
+        return pack("top", { x, y: gap + halfH, deg: 0 }, { derivedTopGap: gap });
       }
 
-      // 2) 等高
-      if (Math.abs(dy) < 0.001) {
-        const cx = clampX(openingCenter);
-        return pack("step", { x: cx, y: lh - halfH, deg: 0 }, {
-          derivedTopGap: Math.max(0, lh - part.height),
-          supportLeft: { x: Math.max(0, cx - halfL), y: lh },
-          supportRight: { x: Math.min(topW, cx + halfL), y: rh }
-        });
-      }
-
-      // 3) 不等高 bridge
+      // 2) 不等高 bridge（等高直接走 3) step）
       // 浅侧内角 S + 深侧台面点 D；|SD|≤L；多余长只伸向浅侧；在宽松校验下排序，再 strict 确认
-      if (L + 0.001 >= Math.abs(dy)) {
+      if (Math.abs(dy) >= 0.001 && L + 0.001 >= Math.abs(dy)) {
         const leftShallow = lh <= rh;
         const S = leftShallow ? { x: ax, y: lh } : { x: bx, y: rh };
         const deepY = leftShallow ? rh : lh;
@@ -561,37 +551,31 @@
         }
       }
 
-      // 4) 矮台水平，优先开口中心
+      // 3) 矮台（或等高台）水平；可行域内 |cx − 开口中心| 最小，含安装间隙
       const stepY = Math.min(lh, rh);
-      const cx = clampX(openingCenter);
-      const stepPose = { x: cx, y: stepY - halfH, deg: 0 };
-      if (validPose(part, stepPose, clearance, true)) {
-        return pack("step", stepPose, {
+      const packStep = (pose) =>
+        pack("step", pose, {
           derivedTopGap: Math.max(0, stepY - part.height),
-          supportLeft: { x: cx - halfL, y: stepY },
-          supportRight: { x: cx + halfL, y: stepY }
+          supportLeft: { x: Math.max(0, pose.x - halfL), y: stepY },
+          supportRight: { x: Math.min(topW, pose.x + halfL), y: stepY }
         });
-      }
-      const xSpan = Math.max(topW - L, 0);
+      const stepPose = { x: clampX(openingCenter), y: stepY - halfH, deg: 0 };
+      if (validPose(part, stepPose, clearance, true)) return packStep(stepPose);
+      const xLo = halfL + clearance;
+      const xSpan = Math.max(topW - clearance - halfL - xLo, 0);
+      const nStep = Math.max(24, Math.ceil(xSpan / 0.25));
       let found = null;
       let foundScore = Infinity;
-      const nStep = 24;
       for (let i = 0; i <= nStep; i += 1) {
-        const x = halfL + (xSpan * i) / nStep;
+        const x = xLo + (xSpan * i) / nStep;
+        const sc = Math.abs(x - openingCenter);
+        if (sc >= foundScore) continue;
         const trial = { x, y: stepY - halfH, deg: 0 };
         if (!validPose(part, trial, clearance, true)) continue;
-        const sc = Math.abs(x - openingCenter);
-        if (sc < foundScore) {
-          foundScore = sc;
-          found = trial;
-        }
+        foundScore = sc;
+        found = trial;
       }
-      const pose = found || stepPose;
-      return pack("step", pose, {
-        derivedTopGap: Math.max(0, stepY - part.height),
-        supportLeft: { x: pose.x - halfL, y: stepY },
-        supportRight: { x: pose.x + halfL, y: stepY }
-      });
+      return packStep(found || stepPose);
     }
 
     function seedFinalCenters(part, options) {
@@ -728,13 +712,35 @@
       }
     }
 
+    // 种子到最终位姿的直线过渡须无碰撞，否则路径末段会「瞬移」穿墙
+    const finalValid = space.validPose(part, finalPose, clearance);
+    function motionFree(a, b) {
+      const n = Math.max(
+        1,
+        Math.ceil(Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y)) / (grid / 2)),
+        Math.ceil(Math.abs(b.deg - a.deg) / 0.5)
+      );
+      for (let i = 1; i < n; i += 1) {
+        const t = i / n;
+        const pose = {
+          x: a.x + (b.x - a.x) * t,
+          y: a.y + (b.y - a.y) * t,
+          deg: a.deg + (b.deg - a.deg) * t
+        };
+        if (!space.validPose(part, pose, clearance)) return false;
+      }
+      return true;
+    }
+
     function trySeed(ix, iy, ia) {
+      if (!finalValid) return;
       if (ix < 0 || ix >= gridXCount || iy < 0 || iy >= gridYCount) return;
       if (ia < 0 || ia >= angles.length) return;
       const sk = stateKey(ix, iy, ia);
       if (seen.has(sk)) return;
       const p = poseOf(ix, iy, ia);
       if (!space.validPose(part, p, clearance)) return;
+      if (!motionFree(p, finalPose)) return;
       seen.add(sk);
       queue.push(sk);
       if (parent) parent.set(sk, -1);
@@ -791,7 +797,8 @@
           if (space.isEntryPose(part, extended, clearance)) {
             found.path.unshift(extended);
           }
-          found.path[found.path.length - 1] = finalPose;
+          // 末点种子与 finalPose 之间已验证可直线过渡，追加而非替换
+          found.path.push(finalPose);
         }
         return found;
       }
@@ -857,24 +864,29 @@
     return findPath(space, part, { ...options, gridScale: 1 });
   }
 
+  /** 统一的失败结果（参数错误 / 模式未实现） */
+  function errorResult(error, clearance, mode) {
+    return {
+      ok: false,
+      mode: mode || "2d",
+      path: [],
+      maxLength: null,
+      error,
+      diagnostics: {
+        grid: 0,
+        angleStep: 0,
+        clearance: clearance || 0,
+        margin: null,
+        firstHit: null,
+        warnings: []
+      }
+    };
+  }
+
   function solve(request) {
     const mode = request.mode || "2d";
     if (mode !== "2d") {
-      return {
-        ok: false,
-        mode,
-        path: [],
-        maxLength: null,
-        error: `模式 ${mode} 尚未实现（v1 仅支持 2d）。`,
-        diagnostics: {
-          grid: 0,
-          angleStep: 0,
-          clearance: 0,
-          margin: null,
-          firstHit: null,
-          warnings: []
-        }
-      };
+      return errorResult(`模式 ${mode} 尚未实现（v1 仅支持 2d）。`, 0, mode);
     }
 
     const cavity = request.cavity || {};
@@ -898,23 +910,7 @@
     };
 
     const error = validateValues(values);
-    if (error) {
-      return {
-        ok: false,
-        mode: "2d",
-        path: [],
-        maxLength: null,
-        error,
-        diagnostics: {
-          grid: 0,
-          angleStep: 0,
-          clearance: values.clearance,
-          margin: null,
-          firstHit: null,
-          warnings: []
-        }
-      };
-    }
+    if (error) return errorResult(error, values.clearance);
 
     const space = createSpace2D(values);
     const part = { length: values.partLength, height: values.partHeight };
@@ -1001,6 +997,7 @@
     findPath,
     estimateMaxLength,
     solve,
+    errorResult,
     buildSolveRequest,
     downsamplePath
   };
