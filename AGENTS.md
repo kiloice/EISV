@@ -9,7 +9,8 @@ Static browser app for recessed installation dimension validation (2D profile, v
 | `EISV_1.0.html` | **Only deliverable** for end users (HTML/CSS/SVG + inlined JS). Offline, zero deps. |
 | `eisv-core.js` | Pure geometry / pathfinding (no DOM). Source of truth for solver; used by tests and Blob Worker text. |
 | `eisv-app.js` | View + app (DOM, URL, debounce, clipboard, worker). |
-| `scripts/assemble.mjs` | Inlines core + app into `EISV_1.0.html`. |
+| `src/template.html` | Page markup + CSS with `{{VERSION}}` / `{{CORE}}` / `{{APP}}` slots. |
+| `scripts/assemble.mjs` | Inlines core + app into the template → `EISV_1.0.html`; version comes from `eisv-core.js` `meta.version`. |
 | `tests/solve-smoke.mjs` | Node smoke tests for the core. |
 | `docs/placement.md` | Final placement invariants, priorities, and postmortem (read before changing `finalPlacementPose`). |
 | `README.md` | User- and maintainer-facing summary. |
@@ -17,7 +18,7 @@ Static browser app for recessed installation dimension validation (2D profile, v
 
 Do **not** reintroduce empty `output/` or commit `.DS_Store`. End users must never need to copy `eisv-*.js` alongside the HTML.
 
-Prefer editing `eisv-core.js` / `eisv-app.js`, then assemble—avoid hand-editing the inlined scripts inside the HTML.
+Prefer editing `eisv-core.js` / `eisv-app.js` / `src/template.html`, then assemble—never hand-edit `EISV_1.0.html`. Bump the version only in `eisv-core.js` `meta.version`.
 
 Solver is mode-aware (`mode: "2d"`; `"3d"` reserved). Path search must use a Space interface only—no scattered `if (mode === "2d")` inside BFS.
 
@@ -29,6 +30,7 @@ No package manager.
 open EISV_1.0.html              # run deliverable
 node tests/solve-smoke.mjs      # core smoke tests
 node scripts/assemble.mjs       # rebuild single-file HTML
+node scripts/assemble.mjs --check  # fail if EISV_1.0.html is stale
 ```
 
 ## Coding Style & Naming Conventions

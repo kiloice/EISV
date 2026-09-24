@@ -216,4 +216,109 @@ const d = { ...core.DEFAULTS };
   console.log("ok: top placement", pTop);
 }
 
+// 7) exact collision: step corner may not slip between edge samples
+{
+  const space = core.createSpace2D(d);
+  const part = { length: 200, height: 40 };
+  // 旧采样实现在此位姿漏检右退台内角 (192,50) 约 2.2mm 的穿入
+  assert(!space.validPose(part, { x: 105.75, y: 57.75, deg: -17 }, 0), "step corner penetration detected");
+  let worst = 0;
+  for (let deg = -30; deg <= 30; deg += 1) {
+    for (let x = 90; x <= 130; x += 0.5) {
+      for (let y = 20; y <= 60; y += 0.5) {
+        if (!space.validPose(part, { x, y, deg }, 0)) continue;
+        const r = (-deg * Math.PI) / 180;
+        const dx = 192 - x;
+        const dy = 50 - y;
+        const lx = dx * Math.cos(r) - dy * Math.sin(r);
+        const ly = dx * Math.sin(r) + dy * Math.cos(r);
+        worst = Math.max(worst, Math.min(100 - Math.abs(lx), 20 - Math.abs(ly)));
+      }
+    }
+  }
+  assert(worst < 0.01, "no undetected corner penetration, got " + worst);
+  console.log("ok: exact collision, max corner penetration", worst.toFixed(3));
+}
+
+// 8) valuesForDraw keeps valid asymmetric insets (no 45% clamp)
+{
+  const drawn = core.valuesForDraw({ ...d, leftInset: 150, rightInset: 20, entryWidth: 42 });
+  assert(drawn.leftInset === 150 && drawn.entryWidth === 42, "valid insets drawn as-is: " + drawn.leftInset);
+  const bad = core.valuesForDraw({ ...d, leftInset: 300, rightInset: 20 });
+  assert(Math.abs(bad.entryWidth - (bad.topWidth - bad.leftInset - bad.rightInset)) < 1e-9, "invalid insets stay consistent");
+  console.log("ok: valuesForDraw asymmetric insets");
+}
+
+// 9) equal-height step with clearance: final pose must honor clearance, path ends there
+{
+  const v = { ...d, clearance: 2 };
+  const space = core.createSpace2D(v);
+  const part = { length: v.partLength, height: v.partHeight };
+  const fp = space.finalPlacementPose(part, { topGap: v.topGap, clearance: 2 });
+  assert(fp.mode === "step", "clearance step mode, got " + fp.mode);
+  assert(space.validPose(part, fp, 2), "final pose valid with clearance");
+  assert(fp.x - part.length / 2 >= 2 - 0.01, "keeps clearance to left wall, x=" + fp.x);
+  const r = core.solve(core.buildSolveRequest(v, { keepPath: true }));
+  assert(r.ok, "clearance 2 still fits");
+  const last = r.path[r.path.length - 1];
+  assert(last.x === fp.x && last.y === fp.y && last.deg === fp.deg, "path ends at finalPlacementPose");
+  console.log("ok: clearance step x=", fp.x, "maxLength=", r.maxLength);
+}
+
+// 10) fillets: fits, final pose valid, not top
+{
+  const v = {
+    ...d,
+    topWidth: 300,
+    entryWidth: 260,
+    leftInset: 20,
+    rightInset: 20,
+    leftOuterRadius: 10,
+    leftInnerRadius: 5,
+    rightOuterRadius: 10,
+    rightInnerRadius: 5,
+    partLength: 275,
+    partHeight: 30,
+    topGap: 1
+  };
+  const r = core.solve(core.buildSolveRequest(v, { keepPath: true }));
+  assert(r.ok, "fillet preset fits");
+  const space = core.createSpace2D(v);
+  const fp = space.finalPlacementPose({ length: 275, height: 30 }, { topGap: 1, clearance: 0 });
+  assert(fp.mode !== "top", "fillet with insets must not be top");
+  assert(space.validPose({ length: 275, height: 30 }, fp, 0), "fillet final pose valid");
+  const tooLong = core.solve(core.buildSolveRequest({ ...v, partLength: 285 }, { keepPath: false }));
+  assert(!tooLong.ok, "285 must not fit fillet cavity");
+  console.log("ok: fillet fit, maxLength=", r.maxLength);
+}
+
+// 11) unequal heights with clearance: never top, final pose valid
+{
+  const v = {
+    ...d,
+    topWidth: 240,
+    entryWidth: 200,
+    leftInset: 10,
+    rightInset: 30,
+    leftHeight: 40,
+    rightHeight: 55,
+    partLength: 190,
+    partHeight: 28,
+    clearance: 1
+  };
+  const space = core.createSpace2D(v);
+  const part = { length: 190, height: 28 };
+  const fp = space.finalPlacementPose(part, { topGap: 5, clearance: 1 });
+  assert(fp.mode !== "top", "insets + clearance must not be top, got " + fp.mode);
+  assert(space.validPose(part, fp, 1), "unequal + clearance final pose valid");
+  console.log("ok: unequal heights + clearance", fp.mode, fp.x.toFixed(1));
+}
+
+// 12) unsupported mode returns shared error shape
+{
+  const r = core.solve({ mode: "3d" });
+  assert(!r.ok && r.mode === "3d" && r.error && r.diagnostics.firstHit === null, "3d error result");
+  console.log("ok: 3d reserved");
+}
+
 console.log("\nAll smoke tests passed.");

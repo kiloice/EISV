@@ -37,17 +37,19 @@ open EISV_1.0.html
 | `EISV_1.0.html` | **交付物**：零依赖单文件，分发只给这个 |
 | `eisv-core.js` | 纯计算源码（无 DOM）；测试与组装用 |
 | `eisv-app.js` | 界面与应用层源码；组装用 |
-| `scripts/assemble.mjs` | 将 core + app 内联进 HTML |
+| `src/template.html` | 页面结构与样式模板（`{{VERSION}}`/`{{CORE}}`/`{{APP}}` 占位） |
+| `scripts/assemble.mjs` | 将 core + app 内联进模板生成 HTML；版本号取自 `eisv-core.js` 的 `meta.version` |
 | `tests/solve-smoke.mjs` | 核心烟测（Node） |
 | `docs/placement.md` | 最终落位不变量、优先级与改动复盘（改落位前必读） |
 | `LICENSE` | 许可证 |
 | `AGENTS.md` | 协作 / Agent 约定 |
 
-修改 `eisv-core.js` 或 `eisv-app.js` 后：
+修改 `eisv-core.js`、`eisv-app.js` 或 `src/template.html` 后：
 
 ```bash
 node tests/solve-smoke.mjs
 node scripts/assemble.mjs
+node scripts/assemble.mjs --check   # 确认 HTML 已与源码同步
 ```
 
 再分发更新后的 `EISV_1.0.html`。
@@ -65,7 +67,7 @@ App / View  →  EISV_CORE.solve(request)  →  Space2D + PathSearch
 
 ## 限制
 
-- 二维采样近似，非 CAD；正式加工请用公差与 CAD 复核
+- 二维近似：碰撞判定为精确几何（圆角按弦折线近似），路径按离散网格搜索；非 CAD，正式加工请用公差与 CAD 复核
 - 单项尺寸建议 ≤ 800mm
 - 无 npm / 无打包器
 

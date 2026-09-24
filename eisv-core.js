@@ -7,7 +7,7 @@
   "use strict";
 
   const meta = {
-    version: "1.1.4",
+    version: "1.1.5",
     mode: "2d",
     modesAvailable: ["2d"]
   };
