@@ -277,8 +277,9 @@
     return geom.leftHeight + (geom.rightHeight - geom.leftHeight) * ratio;
   }
 
-  function edgeSamples(length, height, angleDeg, denser) {
-    const rad = (angleDeg * Math.PI) / 180;
+  /** 零件边界 + 内部网格采样点（世界坐标）；仅用于失败诊断定位干涉点 */
+  function worldSamples(pose, length, height) {
+    const rad = (pose.deg * Math.PI) / 180;
     const cos = Math.cos(rad);
     const sin = Math.sin(rad);
     const halfL = length / 2;
@@ -289,45 +290,22 @@
       [halfL, halfH],
       [-halfL, halfH]
     ];
+    const toWorld = (lx, ly) => [pose.x + lx * cos - ly * sin, pose.y + lx * sin + ly * cos];
     const points = [];
-    const base = denser
-      ? Math.max(16, Math.ceil(Math.max(length, height) / 4))
-      : Math.max(10, Math.ceil(Math.max(length, height) / 8));
-    const perEdge = denser ? base + 8 : base;
-
+    const perEdge = Math.max(16, Math.ceil(Math.max(length, height) / 4)) + 8;
     for (let i = 0; i < corners.length; i += 1) {
       const start = corners[i];
       const end = corners[(i + 1) % corners.length];
       for (let step = 0; step <= perEdge; step += 1) {
         const t = step / perEdge;
-        const localX = start[0] + (end[0] - start[0]) * t;
-        const localY = start[1] + (end[1] - start[1]) * t;
-        points.push([localX * cos - localY * sin, localX * sin + localY * cos]);
+        points.push(toWorld(start[0] + (end[0] - start[0]) * t, start[1] + (end[1] - start[1]) * t));
       }
     }
-    return points;
-  }
-
-  function worldSamples(pose, length, height, denser) {
-    const rad = (pose.deg * Math.PI) / 180;
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
-    const local = edgeSamples(length, height, pose.deg, denser);
-    const points = local.map(([lx, ly]) => [pose.x + lx, pose.y + ly]);
-    if (denser) {
-      const halfL = length / 2;
-      const halfH = height / 2;
-      const nx = 8;
-      const ny = 5;
-      for (let ix = 0; ix <= nx; ix += 1) {
-        for (let iy = 0; iy <= ny; iy += 1) {
-          const lx = -halfL + (length * ix) / nx;
-          const ly = -halfH + (height * iy) / ny;
-          points.push([
-            pose.x + lx * cos - ly * sin,
-            pose.y + lx * sin + ly * cos
-          ]);
-        }
+    const nx = 8;
+    const ny = 5;
+    for (let ix = 0; ix <= nx; ix += 1) {
+      for (let iy = 0; iy <= ny; iy += 1) {
+        points.push(toWorld(-halfL + (length * ix) / nx, -halfH + (height * iy) / ny));
       }
     }
     return points;
@@ -343,35 +321,143 @@
       return true;
     }
 
-    function validPose(part, pose, clearance, strict) {
-      const c = clearance || 0;
-      const samples = worldSamples(pose, part.length, part.height, Boolean(strict));
-      for (const [x, y] of samples) {
-        if (!pointFree(x, y, c)) return false;
-      }
-      if (!strict) return true;
-      // 最终落位：底边加密 + 退台面下方禁入
-      const rad = (pose.deg * Math.PI) / 180;
-      const cos = Math.cos(rad);
-      const sin = Math.sin(rad);
-      const halfL = part.length / 2;
-      const halfH = part.height / 2;
-      const n = Math.max(32, Math.ceil(part.length / 2));
+    /**
+     * 可行域边界折线（按安装间隙 c 偏移）：竖直壁与腔顶内缩 c，退台顶面不偏移
+     * （零件可落台接触），与 pointFree 的语义一致。圆弧按弦折线近似（误差 < 0.01mm 量级）。
+     */
+    const boundaryCache = new Map();
+    const FAR = 1e6;
+
+    function arcPoints(cx, cy, r, a0, a1, dx) {
+      const n = Math.max(6, Math.min(48, Math.ceil(r)));
+      const pts = [];
       for (let i = 0; i <= n; i += 1) {
-        const lx = -halfL + (part.length * i) / n;
-        const x = pose.x + lx * cos - halfH * sin;
-        const y = pose.y + lx * sin + halfH * cos;
-        if (x < geom.entryLeft - 0.001 && y > geom.leftHeight + 0.001 + c) return false;
-        if (x > geom.entryRight + 0.001 && y > geom.rightHeight + 0.001 + c) return false;
-        if (!pointFree(x, y, c)) return false;
+        const a = a0 + ((a1 - a0) * i) / n;
+        pts.push([cx + r * Math.cos(a) + dx, cy + r * Math.sin(a)]);
+      }
+      return pts;
+    }
+
+    function boundarySegments(c) {
+      const cached = boundaryCache.get(c);
+      if (cached) return cached;
+      const { topWidth: tw, entryLeft: el, entryRight: er, leftHeight: lh, rightHeight: rh } = geom;
+      const lo = geom.leftOuterRadius;
+      const li = geom.leftInnerRadius;
+      const ro = geom.rightOuterRadius;
+      const ri = geom.rightInnerRadius;
+      const half = Math.PI / 2;
+      let pts = [[el + c, FAR]];
+      // 左侧：开口壁 → 内角 → 左台顶 → 外角 → 左壁 → 腔顶
+      pts = pts.concat(li > 0 ? arcPoints(el - li, lh + li, li, 0, -half, c) : [[el + c, lh]]);
+      pts = pts.concat(lo > 0 ? arcPoints(lo, lh - lo, lo, half, Math.PI, c) : [[c, lh]]);
+      pts.push([c, c], [tw - c, c]);
+      // 右侧：右壁 → 外角 → 右台顶 → 内角 → 开口壁
+      pts = pts.concat(ro > 0 ? arcPoints(tw - ro, rh - ro, ro, 0, half, -c) : [[tw - c, rh]]);
+      pts = pts.concat(ri > 0 ? arcPoints(er + ri, rh + ri, ri, -half, -Math.PI, -c) : [[er - c, rh]]);
+      pts.push([er - c, FAR]);
+
+      const segs = [];
+      for (let i = 1; i < pts.length; i += 1) {
+        const [x0, y0] = pts[i - 1];
+        const [x1, y1] = pts[i];
+        if (x0 === x1 && y0 === y1) continue;
+        segs.push({
+          x0,
+          y0,
+          x1,
+          y1,
+          minX: Math.min(x0, x1),
+          maxX: Math.max(x0, x1),
+          minY: Math.min(y0, y1),
+          maxY: Math.max(y0, y1)
+        });
+      }
+      boundaryCache.set(c, segs);
+      return segs;
+    }
+
+    /** 线段（零件局部坐标）是否穿过 [-hx,hx]×[-hy,hy]（Liang–Barsky） */
+    function segmentHitsBox(ax, ay, bx, by, hx, hy) {
+      const dx = bx - ax;
+      const dy = by - ay;
+      const p = [-dx, dx, -dy, dy];
+      const q = [ax + hx, hx - ax, ay + hy, hy - ay];
+      let t0 = 0;
+      let t1 = 1;
+      for (let i = 0; i < 4; i += 1) {
+        if (p[i] === 0) {
+          if (q[i] < 0) return false;
+        } else {
+          const r = q[i] / p[i];
+          if (p[i] < 0) {
+            if (r > t0) t0 = r;
+          } else if (r < t1) {
+            t1 = r;
+          }
+          if (t0 > t1) return false;
+        }
       }
       return true;
     }
 
+    /**
+     * 精确位姿校验：零件矩形整体在可行域内 ⇔ 中心在域内 且 无边界线段穿入矩形内部。
+     * 不依赖采样密度；允许贴合接触（内缩 0.001 容差）。
+     */
+    function validPose(part, pose, clearance) {
+      const c = clearance || 0;
+      if (!pointFree(pose.x, pose.y, c)) return false;
+      const rad = (pose.deg * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const hx = part.length / 2 - 0.001;
+      const hy = part.height / 2 - 0.001;
+      if (hx <= 0 || hy <= 0) return true;
+      const reach = Math.hypot(hx, hy);
+      const segs = boundarySegments(c);
+      for (let i = 0; i < segs.length; i += 1) {
+        const s = segs[i];
+        if (
+          s.maxX < pose.x - reach ||
+          s.minX > pose.x + reach ||
+          s.maxY < pose.y - reach ||
+          s.minY > pose.y + reach
+        ) {
+          continue;
+        }
+        const ax = s.x0 - pose.x;
+        const ay = s.y0 - pose.y;
+        const bx = s.x1 - pose.x;
+        const by = s.y1 - pose.y;
+        if (
+          segmentHitsBox(
+            ax * cos + ay * sin,
+            -ax * sin + ay * cos,
+            bx * cos + by * sin,
+            -bx * sin + by * cos,
+            hx,
+            hy
+          )
+        ) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    /** 入口位姿：开口两壁与开口线围成凸区域，矩形四角在内即整体在内 */
     function isEntryPose(part, pose, clearance) {
       const c = clearance || 0;
-      const samples = worldSamples(pose, part.length, part.height, c > 0);
-      for (const [x, y] of samples) {
+      const rad = (pose.deg * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const hl = part.length / 2;
+      const hh = part.height / 2;
+      const corners = [[-hl, -hh], [hl, -hh], [hl, hh], [-hl, hh]];
+      for (const [lx, ly] of corners) {
+        const x = pose.x + lx * cos - ly * sin;
+        const y = pose.y + lx * sin + ly * cos;
         if (
           x < geom.entryLeft - 0.001 + c ||
           x > geom.entryRight + 0.001 - c ||
@@ -385,7 +471,7 @@
 
     function findFirstHit(part, pose, clearance) {
       const c = clearance || 0;
-      const samples = worldSamples(pose, part.length, part.height, true);
+      const samples = worldSamples(pose, part.length, part.height);
       for (const [x, y] of samples) {
         // 真·穿出顶壁（y<0）；有间隙时 y∈[0,c) 是顶侧间隙不足，不是「越过边界」
         if (y < -0.001) {
@@ -490,7 +576,7 @@
       }
 
       // 2) 不等高 bridge（等高直接走 3) step）
-      // 浅侧内角 S + 深侧台面点 D；|SD|≤L；多余长只伸向浅侧；在宽松校验下排序，再 strict 确认
+      // 浅侧内角 S + 深侧台面点 D；|SD|≤L；多余长只伸向浅侧；精确校验过滤后取 |cx − 开口中心| 最小
       if (Math.abs(dy) >= 0.001 && L + 0.001 >= Math.abs(dy)) {
         const leftShallow = lh <= rh;
         const S = leftShallow ? { x: ax, y: lh } : { x: bx, y: rh };
@@ -500,7 +586,7 @@
         const deepW = Math.max(deepX1 - deepX0, 0);
         const n = Math.min(32, Math.max(16, Math.ceil(deepW) || 16));
 
-        const ranked = [];
+        let best = null;
         for (let i = 0; i <= n; i += 1) {
           const Dx = deepX0 + (deepW * i) / n;
           const spanX = Dx - S.x;
@@ -530,23 +616,21 @@
           const deg = (Math.atan2(sin, cos) * 180) / Math.PI;
           const pose = poseFromBottomLeft(x1, y1, cos, sin, deg);
           if (!Number.isFinite(pose.x) || !Number.isFinite(pose.y)) continue;
-          if (!validPose(part, pose, clearance, false)) continue;
-          ranked.push({
+          const score = Math.abs(pose.x - openingCenter);
+          if (best && score >= best.score) continue;
+          if (!validPose(part, pose, clearance)) continue;
+          best = {
             pose,
-            score: Math.abs(pose.x - openingCenter),
+            score,
             supportLeft: leftShallow ? S : { x: Dx, y: deepY },
             supportRight: leftShallow ? { x: Dx, y: deepY } : S
-          });
+          };
         }
 
-        ranked.sort((a, b) => a.score - b.score);
-        const limit = Math.min(8, ranked.length);
-        for (let i = 0; i < limit; i += 1) {
-          const item = ranked[i];
-          if (!validPose(part, item.pose, clearance, true)) continue;
-          return pack("bridge", item.pose, {
-            supportLeft: item.supportLeft,
-            supportRight: item.supportRight
+        if (best) {
+          return pack("bridge", best.pose, {
+            supportLeft: best.supportLeft,
+            supportRight: best.supportRight
           });
         }
       }
@@ -560,7 +644,7 @@
           supportRight: { x: Math.min(topW, pose.x + halfL), y: stepY }
         });
       const stepPose = { x: clampX(openingCenter), y: stepY - halfH, deg: 0 };
-      if (validPose(part, stepPose, clearance, true)) return packStep(stepPose);
+      if (validPose(part, stepPose, clearance)) return packStep(stepPose);
       const xLo = halfL + clearance;
       const xSpan = Math.max(topW - clearance - halfL - xLo, 0);
       const nStep = Math.max(24, Math.ceil(xSpan / 0.25));
@@ -571,7 +655,7 @@
         const sc = Math.abs(x - openingCenter);
         if (sc >= foundScore) continue;
         const trial = { x, y: stepY - halfH, deg: 0 };
-        if (!validPose(part, trial, clearance, true)) continue;
+        if (!validPose(part, trial, clearance)) continue;
         foundScore = sc;
         found = trial;
       }
