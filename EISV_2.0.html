@@ -1,0 +1,3991 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="eisv-version" content="2.0.0">
+  <link rel="icon" href="data:,">
+  <title>凹位装配模拟验证器 3D v2.0.0</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      /*
+       * 基础蓝 #0271B8（geargenerator 系蓝图纸）
+       * 画布略亮、侧栏/页脚略深，线与字用白/浅蓝白
+       */
+      --blue: #0271B8;
+      --page: #0266a6;
+      --sheet: #0271B8;
+      --panel: #0269ad;
+      --panel-raised: #0478c4;
+      --ink: #f4fbff;
+      --muted: #b5d8f0;
+      --line: rgba(255, 255, 255, 0.26);
+      --line-strong: rgba(255, 255, 255, 0.4);
+      --ok: #7dffb8;
+      --warn: #ff9aa6;
+      --wait: #ffe08a;
+      --accent: #dff4ff;
+      --part: #ff8a96;
+      --draft-ink: #ffffff;
+      --draft-ink-dim: #e3f3ff;
+      --draft-thick: 1.65px;
+      --draft-thin: 0.9px;
+      /* 仅腔内淡白透明层，区分内外（无外围实体阴影） */
+      --cavity-wash: rgba(255, 255, 255, 0.1);
+      --part-fill: rgba(255, 138, 150, 0.14);
+      --controls-w: min(380px, 38vw);
+      font-family: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+        -apple-system, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      color: var(--ink);
+      background: var(--page);
+    }
+
+    body {
+      overflow: hidden;
+    }
+
+    .app {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    /* —— 顶栏：标题合一，字号贴近栏高、字重适中 —— */
+    .app-header {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px 24px;
+      flex-wrap: wrap;
+      min-height: 44px;
+      padding: 8px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .app-header .brand {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      line-height: 1.2;
+      color: #ffffff;
+      white-space: nowrap;
+    }
+
+    .app-header .hint {
+      margin: 0;
+      flex: 1 1 200px;
+      max-width: 48ch;
+      font-size: 11px;
+      font-weight: 400;
+      line-height: 1.45;
+      color: #c5e6fa;
+      text-align: right;
+    }
+
+    /* —— 主工作区：左图纸固定 / 右表单滚动 —— */
+    .workspace {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) var(--controls-w);
+      align-items: stretch;
+    }
+
+    .stage {
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--sheet);
+      border-right: 1px solid var(--line);
+    }
+
+    .svg-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--sheet);
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      max-height: 100%;
+      touch-action: manipulation;
+    }
+
+    /* —— 右侧控制：仅此区纵向滚动 —— */
+    .controls {
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 12px;
+      background: var(--panel);
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .panel {
+      flex: 0 0 auto;
+      padding: 12px 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel-raised);
+    }
+
+    .panel-title {
+      margin: 0 0 10px;
+      padding: 0 0 8px 10px;
+      border-left: 3px solid var(--accent);
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      color: #ffffff;
+      line-height: 1.2;
+    }
+
+    fieldset {
+      margin: 0;
+      padding: 0;
+      border: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    legend {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+
+    .input-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 8px;
+    }
+
+    label {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      line-height: 1.3;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      min-height: 36px;
+      padding: 6px 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      outline: none;
+      background: rgba(1, 48, 82, 0.45);
+    }
+
+    input[type="number"]:focus {
+      border-color: #ffffff;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+      background: rgba(1, 48, 82, 0.58);
+    }
+
+    /* 预设 */
+    .preset-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .preset-btn {
+      min-height: 30px;
+      padding: 4px 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      background: rgba(1, 48, 82, 0.35);
+      color: #e8f5ff;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .preset-btn:hover {
+      border-color: #ffffff;
+      color: #ffffff;
+    }
+
+    .preset-btn.is-active {
+      border-color: #ffffff;
+      background: rgba(255, 255, 255, 0.16);
+      color: #ffffff;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    button {
+      min-height: 36px;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      background: rgba(1, 48, 82, 0.4);
+      color: #f0f8ff;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+    }
+
+    button.primary {
+      border-color: rgba(255, 255, 255, 0.55);
+      background: linear-gradient(180deg, #0490e0 0%, #0271B8 100%);
+      color: #ffffff;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    button:hover:not(:disabled) {
+      filter: brightness(1.08);
+    }
+
+    .result {
+      display: grid;
+      gap: 6px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: rgba(1, 48, 82, 0.35);
+    }
+
+    .result strong {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      line-height: 1.2;
+    }
+
+    .result.ok strong { color: var(--ok); }
+    .result.fail strong { color: var(--warn); }
+    .result.wait strong { color: var(--wait); }
+
+    .result p {
+      margin: 0;
+      color: #c8e6fa;
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 1.55;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: rgba(1, 48, 82, 0.3);
+    }
+
+    .metric span {
+      display: block;
+      margin-bottom: 4px;
+      color: #a8d0ec;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+    }
+
+    .metric b {
+      font-size: 13px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #ffffff;
+      overflow-wrap: anywhere;
+    }
+
+    .note {
+      margin: 0;
+      color: #9ec8e6;
+      font-size: 10px;
+      font-weight: 400;
+      line-height: 1.55;
+    }
+
+    /* 图线 */
+    .draft-thick,
+    .draft-thin,
+    .draft-dash,
+    .draft-aux {
+      fill: none;
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .draft-thick {
+      stroke: var(--draft-ink);
+      stroke-width: var(--draft-thick);
+    }
+
+    .draft-thin {
+      stroke: var(--draft-ink-dim);
+      stroke-width: var(--draft-thin);
+    }
+
+    .draft-dash {
+      stroke: rgba(230, 245, 255, 0.75);
+      stroke-width: var(--draft-thin);
+      stroke-dasharray: 4 2.5;
+    }
+
+    .draft-aux {
+      stroke: rgba(200, 240, 255, 0.9);
+      stroke-width: var(--draft-thin);
+      stroke-dasharray: 5 4;
+      stroke-linecap: round;
+    }
+
+    /* 仅空腔内部淡透明层，区分内外 */
+    .cavity-fill {
+      fill: var(--cavity-wash);
+      stroke: none;
+    }
+
+    .dim-line {
+      marker-start: url(#dimArrowStart);
+      marker-end: url(#dimArrowEnd);
+    }
+
+    .dim-text,
+    .label-text {
+      fill: #ffffff;
+      font-size: 10px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      dominant-baseline: middle;
+      stroke: none;
+    }
+
+    .label-text.muted {
+      fill: #d0ebfa;
+      font-size: 9px;
+      font-weight: 500;
+    }
+
+    .turn-dot {
+      fill: #ffffff;
+      stroke: #0271B8;
+      stroke-width: 0.8;
+      vector-effect: non-scaling-stroke;
+    }
+
+    #partFill {
+      fill: var(--part-fill);
+      stroke: none;
+    }
+
+    #partRect {
+      fill: none;
+      stroke: var(--part);
+      stroke-width: var(--draft-thick);
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+      vector-effect: non-scaling-stroke;
+    }
+
+    #part.blocked #partFill { fill: rgba(180, 50, 50, 0.14); }
+    #part.blocked #partRect { stroke: var(--warn); }
+
+    #partText {
+      fill: #f0d8dc;
+      font-size: 11px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      stroke: none;
+    }
+
+    #part.blocked #partText { fill: var(--warn); }
+
+    .ghost {
+      fill: none;
+      stroke: rgba(140, 255, 200, 0.75);
+      stroke-width: var(--draft-thin);
+      stroke-dasharray: 4 2.5;
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .hit-dot {
+      fill: #ff9aa6;
+      stroke: #ffffff;
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .hit-label {
+      fill: #ffe0e4;
+      font-size: 9px;
+      font-weight: 600;
+      stroke: none;
+    }
+
+    /* —— 页脚：弱存在 —— */
+    .app-footer {
+      flex: 0 0 auto;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 6px 16px 8px;
+      border-top: 1px solid var(--line);
+      background: #015a94;
+      color: #8ebfe0;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+    }
+
+    .app-footer a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .app-footer a:hover {
+      color: #c5e6fa;
+    }
+
+    /* —— 平板 / 手机 —— */
+    @media (max-width: 900px) {
+      body {
+        overflow: auto;
+      }
+
+      .app {
+        height: auto;
+        min-height: 100%;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(38vh, 46vh) auto;
+      }
+
+      .stage {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        min-height: 38vh;
+      }
+
+      /* 数值区：横向滑动画板 */
+      .controls {
+        flex-direction: row;
+        align-items: stretch;
+        overflow-x: auto;
+        overflow-y: hidden;
+        gap: 10px;
+        padding: 10px 12px 14px;
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .panel {
+        flex: 0 0 min(86vw, 320px);
+        max-height: 46vh;
+        overflow-y: auto;
+        scroll-snap-align: start;
+      }
+
+      .panel-result {
+        flex-basis: min(90vw, 340px);
+      }
+    }
+
+    @media (max-width: 520px) {
+      .app-header {
+        padding: 8px 12px;
+        min-height: 40px;
+      }
+
+      .app-header .brand {
+        font-size: 15px;
+        white-space: normal;
+      }
+
+      .app-header .hint {
+        display: none;
+      }
+
+      .input-grid,
+      .metrics,
+      .actions {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* —— V2：四视图 —— */
+    .views {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 1px;
+      background: var(--line);
+    }
+
+    .view {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .view .svg-wrap {
+      height: 100%;
+      padding: 22px 8px 8px;
+    }
+
+    .view-title {
+      position: absolute;
+      top: 6px;
+      left: 10px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      pointer-events: none;
+    }
+
+    .part-poly {
+      fill: var(--part-fill);
+      stroke: var(--part);
+      stroke-width: var(--draft-thick);
+      stroke-linejoin: miter;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .part-edge {
+      fill: none;
+      stroke: var(--part);
+      stroke-width: var(--draft-thin);
+      vector-effect: non-scaling-stroke;
+    }
+
+    .blocked .part-poly { fill: rgba(180, 50, 50, 0.14); stroke: var(--warn); }
+    .blocked .part-edge { stroke: var(--warn); }
+
+    .ghost-poly {
+      fill: none;
+      stroke: rgba(140, 255, 200, 0.75);
+      stroke-width: var(--draft-thin);
+      stroke-dasharray: 4 2.5;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .hidden-line {
+      fill: none;
+      stroke: rgba(230, 245, 255, 0.55);
+      stroke-width: var(--draft-thin);
+      stroke-dasharray: 3 2.5;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .axis-label {
+      fill: var(--muted);
+      font-size: 9px;
+      font-weight: 600;
+    }
+
+    .sub-title {
+      margin: 4px 0 -2px;
+      color: #d7ecfa;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+    }
+
+    @media (max-width: 900px) {
+      .workspace {
+        grid-template-rows: minmax(62vh, 72vh) auto;
+      }
+
+      .stage {
+        min-height: 62vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <p class="brand">EISV凹位装配模拟验证器 3D V2.0.0</p>
+      <p class="hint">改参即重算 · 平移 + 偏航 + 倾转 · 三维近似 · 正式加工请 CAD 复核</p>
+    </header>
+
+    <section class="workspace" aria-label="三维凹位装配验证工具">
+      <div class="stage">
+        <svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+          <defs>
+            <marker id="dimArrowEnd" viewBox="0 0 10 6" refX="9.5" refY="3" markerWidth="9" markerHeight="6" orient="auto" markerUnits="strokeWidth">
+              <path d="M0 0.4 L9.5 3 L0 5.6 Z" fill="#ffffff"></path>
+            </marker>
+            <marker id="dimArrowStart" viewBox="0 0 10 6" refX="0.5" refY="3" markerWidth="9" markerHeight="6" orient="auto" markerUnits="strokeWidth">
+              <path d="M10 0.4 L0.5 3 L10 5.6 Z" fill="#ffffff"></path>
+            </marker>
+          </defs>
+        </svg>
+        <div class="views">
+          <div class="view">
+            <p class="view-title">主视图（左右剖面）</p>
+            <div class="svg-wrap"><svg id="viewFront" role="img" aria-label="主视图：宽度与高度方向"></svg></div>
+          </div>
+          <div class="view">
+            <p class="view-title">左视图（前后剖面）</p>
+            <div class="svg-wrap"><svg id="viewSide" role="img" aria-label="左视图：深度与高度方向"></svg></div>
+          </div>
+          <div class="view">
+            <p class="view-title">俯视图</p>
+            <div class="svg-wrap"><svg id="viewTop" role="img" aria-label="俯视图：宽度与深度方向"></svg></div>
+          </div>
+          <div class="view">
+            <p class="view-title">轴测图（自下方看向凹腔）</p>
+            <div class="svg-wrap"><svg id="viewIso" role="img" aria-label="轴测图"></svg></div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="controls" aria-label="尺寸输入和计算结果">
+        <div class="panel panel-presets">
+          <p class="panel-title">预设凹位</p>
+          <div class="preset-row" id="presetRow"></div>
+        </div>
+
+        <div class="panel panel-cavity">
+          <p class="panel-title">空腔尺寸</p>
+          <fieldset>
+            <legend>空腔尺寸</legend>
+            <div class="input-grid">
+              <label for="topWidthInput">顶部净宽（mm）
+                <input id="topWidthInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="topDepthInput">顶部净深（mm）
+                <input id="topDepthInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="entryWidthInput">开口宽度（mm）
+                <input id="entryWidthInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="entryDepthInput">开口深度（mm）
+                <input id="entryDepthInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+            </div>
+            <p class="sub-title">退进</p>
+            <div class="input-grid">
+              <label for="leftInsetInput">左侧退进（mm）
+                <input id="leftInsetInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+              <label for="rightInsetInput">右侧退进（mm）
+                <input id="rightInsetInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+              <label for="frontInsetInput">前侧退进（mm）
+                <input id="frontInsetInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+              <label for="backInsetInput">后侧退进（mm）
+                <input id="backInsetInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+            </div>
+            <p class="sub-title">空腔高度</p>
+            <div class="input-grid">
+              <label for="leftHeightInput">左侧高度（mm）
+                <input id="leftHeightInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="rightHeightInput">右侧高度（mm）
+                <input id="rightHeightInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="frontHeightInput">前侧高度（mm）
+                <input id="frontHeightInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="backHeightInput">后侧高度（mm）
+                <input id="backHeightInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+            </div>
+            <p class="sub-title">左右圆角</p>
+            <div class="input-grid">
+              <label for="leftOuterRadiusInput">左外角半径（mm）
+                <input id="leftOuterRadiusInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+              <label for="leftInnerRadiusInput">左内角半径（mm）
+                <input id="leftInnerRadiusInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+              <label for="rightOuterRadiusInput">右外角半径（mm）
+                <input id="rightOuterRadiusInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+              <label for="rightInnerRadiusInput">右内角半径（mm）
+                <input id="rightInnerRadiusInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+            </div>
+          </fieldset>
+        </div>
+
+        <div class="panel panel-part">
+          <p class="panel-title">放入物体（长方体）</p>
+          <fieldset>
+            <legend>放入物体</legend>
+            <div class="input-grid">
+              <label for="partLengthInput">长度（mm）
+                <input id="partLengthInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="partWidthInput">宽度（mm）
+                <input id="partWidthInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="partHeightInput">高度（mm）
+                <input id="partHeightInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="topGapInput">离顶距离（mm）
+                <input id="topGapInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+              <label for="clearanceInput">安装间隙（mm）
+                <input id="clearanceInput" type="number" inputmode="decimal" min="0" step="0.1">
+              </label>
+            </div>
+          </fieldset>
+        </div>
+
+        <div class="panel panel-result">
+          <p class="panel-title">结果与操作</p>
+          <div class="actions">
+            <button class="primary" id="validateBtn" type="button">再次计算</button>
+            <button id="resetBtn" type="button">重置</button>
+            <button id="replayBtn" type="button" disabled>重播</button>
+            <button id="copyBtn" type="button" disabled>复制结果</button>
+          </div>
+          <div id="result" class="result wait" aria-live="polite" style="margin-top:10px">
+            <strong id="resultTitle">计算中</strong>
+            <p id="resultCopy">正在根据当前尺寸更新。</p>
+          </div>
+          <div class="metrics" style="margin-top:10px">
+            <div class="metric">
+              <span>最大可放长度</span>
+              <b id="maxLength">--</b>
+            </div>
+            <div class="metric">
+              <span>当前物体</span>
+              <b id="partMetric">--</b>
+            </div>
+            <div class="metric">
+              <span>装入方式</span>
+              <b id="strategyMetric">--</b>
+            </div>
+            <div class="metric">
+              <span>最终落位</span>
+              <b id="placeMetric">--</b>
+            </div>
+            <div class="metric">
+              <span>顶部 宽×深</span>
+              <b id="topMetric">--</b>
+            </div>
+            <div class="metric">
+              <span>开口 宽×深</span>
+              <b id="entryMetric">--</b>
+            </div>
+          </div>
+          <p class="note" style="margin-top:10px">三维近似：长方体零件 · 平移 + 偏航 + 倾转 5 自由度 · 精确碰撞判定 · 单文件离线可用 · 正式加工请 CAD 复核</p>
+        </div>
+      </aside>
+    </section>
+
+    <footer class="app-footer">
+      <span>EISV · Engineering Installation Simulation Validator · 3D</span>
+      <span>Author Tony.D · © 2026 · GPL-3.0 License</span>
+    </footer>
+  </div>
+
+  <script id="eisv-core">
+/**
+ * EISV pure core — no DOM.
+ * Pose2D: { x, y, deg }
+ * Loaded on main thread and inside Blob Worker.
+ */
+(function (global) {
+  "use strict";
+
+  const meta = {
+    version: "1.1.5",
+    mode: "2d",
+    modesAvailable: ["2d"]
+  };
+
+  const DEFAULTS = {
+    topWidth: 212,
+    entryWidth: 192,
+    leftInset: 0,
+    rightInset: 20,
+    leftHeight: 50,
+    rightHeight: 50,
+    leftOuterRadius: 0,
+    leftInnerRadius: 0,
+    rightOuterRadius: 0,
+    rightInnerRadius: 0,
+    partLength: 200,
+    partHeight: 40,
+    topGap: 5,
+    clearance: 0
+  };
+
+  function formatNumber(value) {
+    return Number(Number(value).toFixed(1)).toString();
+  }
+
+  function formatInputValue(value) {
+    if (!Number.isFinite(value)) return "";
+    return Number(value.toFixed(3)).toString();
+  }
+
+  /** Sanitize values for drawing only — per-field fallback, never wholesale DEFAULTS. */
+  function valuesForDraw(values) {
+    const d = DEFAULTS;
+    function pos(v, def) {
+      if (!Number.isFinite(v) || v <= 0) return def;
+      return Math.min(v, 800);
+    }
+    function nonNeg(v, def) {
+      if (!Number.isFinite(v) || v < 0) return def;
+      return Math.min(v, 800);
+    }
+    const topWidth = pos(values.topWidth, d.topWidth);
+    let leftInset = nonNeg(values.leftInset, d.leftInset);
+    let rightInset = nonNeg(values.rightInset, d.rightInset);
+    // 只有退进之和不合法时才截断，合法输入必须按原尺寸绘制（与求解几何一致）
+    if (leftInset + rightInset >= topWidth) {
+      leftInset = Math.min(leftInset, topWidth * 0.45);
+      rightInset = Math.min(rightInset, topWidth * 0.45);
+    }
+    const entryWidth = topWidth - leftInset - rightInset;
+    return {
+      topWidth,
+      entryWidth,
+      leftInset,
+      rightInset,
+      leftHeight: pos(values.leftHeight, d.leftHeight),
+      rightHeight: pos(values.rightHeight, d.rightHeight),
+      leftOuterRadius: nonNeg(values.leftOuterRadius, 0),
+      leftInnerRadius: nonNeg(values.leftInnerRadius, 0),
+      rightOuterRadius: nonNeg(values.rightOuterRadius, 0),
+      rightInnerRadius: nonNeg(values.rightInnerRadius, 0),
+      partLength: pos(values.partLength, d.partLength),
+      partHeight: pos(values.partHeight, d.partHeight),
+      topGap: nonNeg(values.topGap, d.topGap),
+      clearance: nonNeg(values.clearance, 0)
+    };
+  }
+
+  function validateValues(values) {
+    const names = [
+      ["顶部净宽", values.topWidth],
+      ["下方开口", values.entryWidth],
+      ["左侧空腔高度", values.leftHeight],
+      ["右侧空腔高度", values.rightHeight],
+      ["矩形长度", values.partLength],
+      ["矩形高度", values.partHeight]
+    ];
+    for (const [label, value] of names) {
+      if (!Number.isFinite(value) || value <= 0) return `${label}必须大于 0。`;
+    }
+    const nonNegativeNames = [
+      ["左侧退进", values.leftInset],
+      ["右侧退进", values.rightInset],
+      ["左外角圆角半径", values.leftOuterRadius],
+      ["左内角圆角半径", values.leftInnerRadius],
+      ["右外角圆角半径", values.rightOuterRadius],
+      ["右内角圆角半径", values.rightInnerRadius],
+      ["离顶距离", values.topGap],
+      ["安装间隙", values.clearance]
+    ];
+    for (const [label, value] of nonNegativeNames) {
+      if (!Number.isFinite(value) || value < 0) return `${label}不能小于 0。`;
+    }
+    if (values.leftInset + values.rightInset >= values.topWidth) {
+      return "左右退进之和必须小于顶部净宽。";
+    }
+    if (values.leftOuterRadius + values.leftInnerRadius > values.leftInset) {
+      return "左内外圆角半径之和不能大于左侧退进。";
+    }
+    if (values.rightOuterRadius + values.rightInnerRadius > values.rightInset) {
+      return "右内外圆角半径之和不能大于右侧退进。";
+    }
+    if (values.leftOuterRadius > values.leftHeight) {
+      return "左外角圆角半径不能大于左侧空腔高度。";
+    }
+    if (values.rightOuterRadius > values.rightHeight) {
+      return "右外角圆角半径不能大于右侧空腔高度。";
+    }
+    if (Math.abs(values.entryWidth - (values.topWidth - values.leftInset - values.rightInset)) > 0.01) {
+      return "下方开口应等于顶部净宽减左侧退进和右侧退进。";
+    }
+    const cavityMaxH = Math.max(values.leftHeight, values.rightHeight);
+    const hasInset = values.leftInset > 0.001 || values.rightInset > 0.001;
+    if (values.partHeight > cavityMaxH) {
+      return "矩形高度大于空腔最大高度，无法放入。";
+    }
+    if (hasInset) {
+      // 落在退台上：件高不宜超过较矮一侧退台高度（否则顶面会越过腔顶）
+      const stepMin = Math.min(values.leftHeight, values.rightHeight);
+      if (values.partHeight > stepMin + 0.001) {
+        return "矩形高度大于较矮一侧空腔高度，无法落在退台上。";
+      }
+    } else if (values.topGap + values.partHeight > cavityMaxH + 0.001) {
+      return "矩形高度与离顶距离之和超过空腔高度，无法水平放到顶部。";
+    }
+    // 直壁吸顶：离顶距离须 ≥ 安装间隙。有退台时最终位姿由退台决定，此项不套用用户离顶输入。
+    if (!hasInset && values.clearance > 0 && values.topGap + 0.001 < values.clearance) {
+      return "离顶距离与安装间隙互相干涉：最终位姿下零件上表面到顶壁的空隙为离顶距离，须不小于安装间隙。请增大离顶距离，或减小安装间隙（贴顶且要求间隙时二者不能同时满足）。";
+    }
+    if (Object.values(values).some((value) => Number.isFinite(value) && value > 800)) {
+      return "单项尺寸建议不超过 800mm；此工具为浏览器内近似验证。";
+    }
+    return "";
+  }
+
+  /** Pure linked-field update. Returns patch object for changed dependents. */
+  function linkedInputPatch(values, changedKey) {
+    const topWidth = values.topWidth;
+    if (!Number.isFinite(topWidth)) return {};
+    if (changedKey === "entryWidth") {
+      const entryWidth = values.entryWidth;
+      const leftInset = values.leftInset;
+      if (Number.isFinite(entryWidth)) {
+        return {
+          rightInset: topWidth - (Number.isFinite(leftInset) ? leftInset : 0) - entryWidth
+        };
+      }
+      return {};
+    }
+    if (changedKey === "leftInset" || changedKey === "rightInset" || changedKey === "topWidth") {
+      const leftInset = values.leftInset;
+      const rightInset = values.rightInset;
+      if (Number.isFinite(rightInset)) {
+        return {
+          entryWidth: topWidth - (Number.isFinite(leftInset) ? leftInset : 0) - rightInset
+        };
+      }
+    }
+    return {};
+  }
+
+  function deriveGeom(values) {
+    const entryLeft = values.leftInset;
+    const entryRight = values.topWidth - values.rightInset;
+    const entryWidth = entryRight - entryLeft;
+    const cavityHeight = Math.max(values.leftHeight, values.rightHeight);
+    const yMax = cavityHeight + Math.max((values.topGap + values.partHeight) * 3, values.topWidth * 0.55, 90);
+    const maxDim = Math.max(
+      values.topWidth,
+      values.entryWidth,
+      values.leftHeight,
+      values.rightHeight,
+      values.partLength,
+      values.partHeight,
+      values.topGap,
+      yMax
+    );
+    const grid = Math.max(1, Math.ceil(maxDim / 320));
+    return {
+      topWidth: values.topWidth,
+      entryLeft,
+      entryRight,
+      entryWidth,
+      leftInset: values.leftInset,
+      rightInset: values.rightInset,
+      leftHeight: values.leftHeight,
+      rightHeight: values.rightHeight,
+      leftOuterRadius: values.leftOuterRadius,
+      leftInnerRadius: values.leftInnerRadius,
+      rightOuterRadius: values.rightOuterRadius,
+      rightInnerRadius: values.rightInnerRadius,
+      cavityHeight,
+      partLength: values.partLength,
+      partHeight: values.partHeight,
+      topGap: values.topGap,
+      yMax,
+      grid,
+      angleStep: grid > 1 ? 2 : 1,
+      minAngle: -88,
+      maxAngle: 88
+    };
+  }
+
+  function buildCavityPaths(geom) {
+    const lo = geom.leftOuterRadius;
+    const li = geom.leftInnerRadius;
+    const ro = geom.rightOuterRadius;
+    const ri = geom.rightInnerRadius;
+
+    const rightOuter = ro > 0
+      ? `V ${geom.rightHeight - ro} A ${ro} ${ro} 0 0 1 ${geom.topWidth - ro} ${geom.rightHeight}`
+      : `V ${geom.rightHeight}`;
+    const rightInner = ri > 0
+      ? `H ${geom.entryRight + ri} A ${ri} ${ri} 0 0 0 ${geom.entryRight} ${geom.rightHeight + ri}`
+      : `H ${geom.entryRight}`;
+    const leftInner = li > 0
+      ? `V ${geom.leftHeight + li} A ${li} ${li} 0 0 0 ${geom.entryLeft - li} ${geom.leftHeight}`
+      : `V ${geom.leftHeight}`;
+    const leftOuter = lo > 0
+      ? `H ${lo} A ${lo} ${lo} 0 0 1 0 ${geom.leftHeight - lo}`
+      : "H 0";
+
+    const fill = `M 0 0 H ${geom.topWidth} ${rightOuter} ${rightInner} V ${geom.yMax} H ${geom.entryLeft} ${leftInner} ${leftOuter} V 0 Z`;
+    const stroke = `M ${geom.entryLeft} ${geom.yMax} ${leftInner} ${leftOuter} V 0 H ${geom.topWidth} ${rightOuter} ${rightInner} V ${geom.yMax}`;
+    return { fill, stroke };
+  }
+
+  function xMinAt(geom, y) {
+    if (y < 0) return Infinity;
+    const outer = geom.leftOuterRadius;
+    const inner = geom.leftInnerRadius;
+    if (outer > 0 && y > geom.leftHeight - outer && y <= geom.leftHeight) {
+      const cy = geom.leftHeight - outer;
+      return outer - Math.sqrt(Math.max(0, outer * outer - (y - cy) * (y - cy)));
+    }
+    if (y <= geom.leftHeight) return 0;
+    if (inner > 0 && y <= geom.leftHeight + inner) {
+      const dy = y - geom.leftHeight;
+      return geom.entryLeft - inner + Math.sqrt(Math.max(0, inner * inner - (inner - dy) * (inner - dy)));
+    }
+    return geom.entryLeft;
+  }
+
+  function xMaxAt(geom, y) {
+    if (y < 0) return -Infinity;
+    const outer = geom.rightOuterRadius;
+    const inner = geom.rightInnerRadius;
+    if (outer > 0 && y > geom.rightHeight - outer && y <= geom.rightHeight) {
+      const cy = geom.rightHeight - outer;
+      return geom.topWidth - outer + Math.sqrt(Math.max(0, outer * outer - (y - cy) * (y - cy)));
+    }
+    if (y <= geom.rightHeight) return geom.topWidth;
+    if (inner > 0 && y <= geom.rightHeight + inner) {
+      const dy = y - geom.rightHeight;
+      return geom.entryRight + inner - Math.sqrt(Math.max(0, inner * inner - (inner - dy) * (inner - dy)));
+    }
+    return geom.entryRight;
+  }
+
+  function openingYAt(geom, x) {
+    const clampedX = Math.max(geom.entryLeft, Math.min(geom.entryRight, x));
+    const ratio = geom.entryWidth === 0 ? 0 : (clampedX - geom.entryLeft) / geom.entryWidth;
+    return geom.leftHeight + (geom.rightHeight - geom.leftHeight) * ratio;
+  }
+
+  /** 零件边界 + 内部网格采样点（世界坐标）；仅用于失败诊断定位干涉点 */
+  function worldSamples(pose, length, height) {
+    const rad = (pose.deg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const halfL = length / 2;
+    const halfH = height / 2;
+    const corners = [
+      [-halfL, -halfH],
+      [halfL, -halfH],
+      [halfL, halfH],
+      [-halfL, halfH]
+    ];
+    const toWorld = (lx, ly) => [pose.x + lx * cos - ly * sin, pose.y + lx * sin + ly * cos];
+    const points = [];
+    const perEdge = Math.max(16, Math.ceil(Math.max(length, height) / 4)) + 8;
+    for (let i = 0; i < corners.length; i += 1) {
+      const start = corners[i];
+      const end = corners[(i + 1) % corners.length];
+      for (let step = 0; step <= perEdge; step += 1) {
+        const t = step / perEdge;
+        points.push(toWorld(start[0] + (end[0] - start[0]) * t, start[1] + (end[1] - start[1]) * t));
+      }
+    }
+    const nx = 8;
+    const ny = 5;
+    for (let ix = 0; ix <= nx; ix += 1) {
+      for (let iy = 0; iy <= ny; iy += 1) {
+        points.push(toWorld(-halfL + (length * ix) / nx, -halfH + (height * iy) / ny));
+      }
+    }
+    return points;
+  }
+
+  function createSpace2D(values) {
+    const geom = deriveGeom(values);
+
+    function pointFree(x, y, c) {
+      if (y < -0.001 + c) return false;
+      if (x < xMinAt(geom, y) + c - 0.001 || x > xMaxAt(geom, y) - c + 0.001) return false;
+      return true;
+    }
+
+    /**
+     * 可行域边界折线（按安装间隙 c 偏移）：竖直壁与腔顶内缩 c，退台顶面不偏移
+     * （零件可落台接触），与 pointFree 的语义一致。圆弧按弦折线近似（误差 < 0.01mm 量级）。
+     */
+    const boundaryCache = new Map();
+    const FAR = 1e6;
+
+    function arcPoints(cx, cy, r, a0, a1, dx) {
+      const n = Math.max(6, Math.min(48, Math.ceil(r)));
+      const pts = [];
+      for (let i = 0; i <= n; i += 1) {
+        const a = a0 + ((a1 - a0) * i) / n;
+        pts.push([cx + r * Math.cos(a) + dx, cy + r * Math.sin(a)]);
+      }
+      return pts;
+    }
+
+    function boundarySegments(c) {
+      const cached = boundaryCache.get(c);
+      if (cached) return cached;
+      const { topWidth: tw, entryLeft: el, entryRight: er, leftHeight: lh, rightHeight: rh } = geom;
+      const lo = geom.leftOuterRadius;
+      const li = geom.leftInnerRadius;
+      const ro = geom.rightOuterRadius;
+      const ri = geom.rightInnerRadius;
+      const half = Math.PI / 2;
+      let pts = [[el + c, FAR]];
+      // 左侧：开口壁 → 内角 → 左台顶 → 外角 → 左壁 → 腔顶
+      pts = pts.concat(li > 0 ? arcPoints(el - li, lh + li, li, 0, -half, c) : [[el + c, lh]]);
+      pts = pts.concat(lo > 0 ? arcPoints(lo, lh - lo, lo, half, Math.PI, c) : [[c, lh]]);
+      pts.push([c, c], [tw - c, c]);
+      // 右侧：右壁 → 外角 → 右台顶 → 内角 → 开口壁
+      pts = pts.concat(ro > 0 ? arcPoints(tw - ro, rh - ro, ro, 0, half, -c) : [[tw - c, rh]]);
+      pts = pts.concat(ri > 0 ? arcPoints(er + ri, rh + ri, ri, -half, -Math.PI, -c) : [[er - c, rh]]);
+      pts.push([er - c, FAR]);
+
+      const segs = [];
+      for (let i = 1; i < pts.length; i += 1) {
+        const [x0, y0] = pts[i - 1];
+        const [x1, y1] = pts[i];
+        if (x0 === x1 && y0 === y1) continue;
+        segs.push({
+          x0,
+          y0,
+          x1,
+          y1,
+          minX: Math.min(x0, x1),
+          maxX: Math.max(x0, x1),
+          minY: Math.min(y0, y1),
+          maxY: Math.max(y0, y1)
+        });
+      }
+      boundaryCache.set(c, segs);
+      return segs;
+    }
+
+    /** 线段（零件局部坐标）是否穿过 [-hx,hx]×[-hy,hy]（Liang–Barsky） */
+    function segmentHitsBox(ax, ay, bx, by, hx, hy) {
+      const dx = bx - ax;
+      const dy = by - ay;
+      const p = [-dx, dx, -dy, dy];
+      const q = [ax + hx, hx - ax, ay + hy, hy - ay];
+      let t0 = 0;
+      let t1 = 1;
+      for (let i = 0; i < 4; i += 1) {
+        if (p[i] === 0) {
+          if (q[i] < 0) return false;
+        } else {
+          const r = q[i] / p[i];
+          if (p[i] < 0) {
+            if (r > t0) t0 = r;
+          } else if (r < t1) {
+            t1 = r;
+          }
+          if (t0 > t1) return false;
+        }
+      }
+      return true;
+    }
+
+    /**
+     * 精确位姿校验：零件矩形整体在可行域内 ⇔ 中心在域内 且 无边界线段穿入矩形内部。
+     * 不依赖采样密度；允许贴合接触（内缩 0.001 容差）。
+     */
+    function validPose(part, pose, clearance) {
+      const c = clearance || 0;
+      if (!pointFree(pose.x, pose.y, c)) return false;
+      const rad = (pose.deg * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const hx = part.length / 2 - 0.001;
+      const hy = part.height / 2 - 0.001;
+      if (hx <= 0 || hy <= 0) return true;
+      const reach = Math.hypot(hx, hy);
+      const segs = boundarySegments(c);
+      for (let i = 0; i < segs.length; i += 1) {
+        const s = segs[i];
+        if (
+          s.maxX < pose.x - reach ||
+          s.minX > pose.x + reach ||
+          s.maxY < pose.y - reach ||
+          s.minY > pose.y + reach
+        ) {
+          continue;
+        }
+        const ax = s.x0 - pose.x;
+        const ay = s.y0 - pose.y;
+        const bx = s.x1 - pose.x;
+        const by = s.y1 - pose.y;
+        if (
+          segmentHitsBox(
+            ax * cos + ay * sin,
+            -ax * sin + ay * cos,
+            bx * cos + by * sin,
+            -bx * sin + by * cos,
+            hx,
+            hy
+          )
+        ) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    /** 入口位姿：开口两壁与开口线围成凸区域，矩形四角在内即整体在内 */
+    function isEntryPose(part, pose, clearance) {
+      const c = clearance || 0;
+      const rad = (pose.deg * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const hl = part.length / 2;
+      const hh = part.height / 2;
+      const corners = [[-hl, -hh], [hl, -hh], [hl, hh], [-hl, hh]];
+      for (const [lx, ly] of corners) {
+        const x = pose.x + lx * cos - ly * sin;
+        const y = pose.y + lx * sin + ly * cos;
+        if (
+          x < geom.entryLeft - 0.001 + c ||
+          x > geom.entryRight + 0.001 - c ||
+          y < openingYAt(geom, x) - 0.001 + c
+        ) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function findFirstHit(part, pose, clearance) {
+      const c = clearance || 0;
+      const samples = worldSamples(pose, part.length, part.height);
+      for (const [x, y] of samples) {
+        // 真·穿出顶壁（y<0）；有间隙时 y∈[0,c) 是顶侧间隙不足，不是「越过边界」
+        if (y < -0.001) {
+          return { pose, point: { x, y }, reason: "越过顶部边界" };
+        }
+        if (c > 0 && y < c - 0.001) {
+          return {
+            pose,
+            point: { x, y },
+            reason: "顶侧安装间隙不足（离顶距离须 ≥ 安装间隙）"
+          };
+        }
+        const xmin = xMinAt(geom, y) + c;
+        const xmax = xMaxAt(geom, y) - c;
+        if (x < xmin - 0.001) {
+          return {
+            pose,
+            point: { x, y },
+            reason: c > 0 ? "左侧壁安装间隙不足" : "左侧壁干涉"
+          };
+        }
+        if (x > xmax + 0.001) {
+          return {
+            pose,
+            point: { x, y },
+            reason: c > 0 ? "右侧壁安装间隙不足" : "右侧壁干涉"
+          };
+        }
+      }
+      return null;
+    }
+
+    /**
+     * 最终落位（分层）：
+     * 1 无退台 → top 吸顶对中
+     * 2 不等高 → bridge：浅侧内角 + 深侧台面；深侧触点扫描，可行域内 |cx−开口中心| 最小
+     * 3 等高或无法斜担 → 较矮（等高）一侧 step，经碰撞校验后仍优先对中（有退台不吸顶）
+     */
+    function finalPlacementPose(part, options) {
+      const clearance = options.clearance || 0;
+      const topGapRaw = options.topGap != null ? options.topGap : geom.topGap;
+      const openingCenter = geom.entryLeft + geom.entryWidth / 2;
+      const halfL = part.length / 2;
+      const halfH = part.height / 2;
+      const topW = geom.topWidth;
+      const clampX = (x) => Math.max(halfL, Math.min(topW - halfL, x));
+      const lh = geom.leftHeight;
+      const rh = geom.rightHeight;
+      const ax = geom.entryLeft;
+      const bx = geom.entryRight;
+      const L = part.length;
+      const dy = rh - lh;
+
+      function bottomCorners(pose) {
+        const rad = (pose.deg * Math.PI) / 180;
+        const c = Math.cos(rad);
+        const s = Math.sin(rad);
+        return {
+          contactLeft: {
+            x: pose.x - halfL * c - halfH * s,
+            y: pose.y - halfL * s + halfH * c
+          },
+          contactRight: {
+            x: pose.x + halfL * c - halfH * s,
+            y: pose.y + halfL * s + halfH * c
+          }
+        };
+      }
+
+      function poseFromBottomLeft(x1, y1, cos, sin, deg) {
+        return {
+          x: x1 + halfL * cos + halfH * sin,
+          y: y1 + halfL * sin - halfH * cos,
+          deg
+        };
+      }
+
+      function pack(mode, pose, extra) {
+        const ends = bottomCorners(pose);
+        const out = {
+          x: pose.x,
+          y: pose.y,
+          deg: pose.deg,
+          mode,
+          derivedTopGap: Math.max(0, pose.y - halfH * Math.cos((pose.deg * Math.PI) / 180)),
+          contactLeft: ends.contactLeft,
+          contactRight: ends.contactRight
+        };
+        if (extra) {
+          if (extra.supportLeft) out.supportLeft = extra.supportLeft;
+          if (extra.supportRight) out.supportRight = extra.supportRight;
+          if (extra.derivedTopGap != null) out.derivedTopGap = extra.derivedTopGap;
+        }
+        return out;
+      }
+
+      // 1) 直壁
+      if (geom.leftInset <= 0.001 && geom.rightInset <= 0.001) {
+        const gap = Number.isFinite(topGapRaw) ? topGapRaw : 1;
+        const x = Math.max(halfL + clearance, Math.min(topW - halfL - clearance, openingCenter));
+        return pack("top", { x, y: gap + halfH, deg: 0 }, { derivedTopGap: gap });
+      }
+
+      // 2) 不等高 bridge（等高直接走 3) step）
+      // 浅侧内角 S + 深侧台面点 D；|SD|≤L；多余长只伸向浅侧；精确校验过滤后取 |cx − 开口中心| 最小
+      if (Math.abs(dy) >= 0.001 && L + 0.001 >= Math.abs(dy)) {
+        const leftShallow = lh <= rh;
+        const S = leftShallow ? { x: ax, y: lh } : { x: bx, y: rh };
+        const deepY = leftShallow ? rh : lh;
+        const deepX0 = leftShallow ? bx : 0;
+        const deepX1 = leftShallow ? topW : ax;
+        const deepW = Math.max(deepX1 - deepX0, 0);
+        const n = Math.min(32, Math.max(16, Math.ceil(deepW) || 16));
+
+        let best = null;
+        for (let i = 0; i <= n; i += 1) {
+          const Dx = deepX0 + (deepW * i) / n;
+          const spanX = Dx - S.x;
+          const spanY = deepY - S.y;
+          const d = Math.hypot(spanX, spanY);
+          if (d < Math.abs(dy) - 0.001 || d > L + 0.001) continue;
+
+          const t = L - d;
+          let x1;
+          let y1;
+          let cos;
+          let sin;
+          if (leftShallow) {
+            cos = spanX / d;
+            sin = spanY / d;
+            x1 = S.x - t * cos;
+            y1 = S.y - t * sin;
+            if (x1 < -0.05) continue;
+          } else {
+            cos = (S.x - Dx) / d;
+            sin = (S.y - deepY) / d;
+            x1 = Dx;
+            y1 = deepY;
+            if (x1 + L * cos > topW + 0.05) continue;
+          }
+
+          const deg = (Math.atan2(sin, cos) * 180) / Math.PI;
+          const pose = poseFromBottomLeft(x1, y1, cos, sin, deg);
+          if (!Number.isFinite(pose.x) || !Number.isFinite(pose.y)) continue;
+          const score = Math.abs(pose.x - openingCenter);
+          if (best && score >= best.score) continue;
+          if (!validPose(part, pose, clearance)) continue;
+          best = {
+            pose,
+            score,
+            supportLeft: leftShallow ? S : { x: Dx, y: deepY },
+            supportRight: leftShallow ? { x: Dx, y: deepY } : S
+          };
+        }
+
+        if (best) {
+          return pack("bridge", best.pose, {
+            supportLeft: best.supportLeft,
+            supportRight: best.supportRight
+          });
+        }
+      }
+
+      // 3) 矮台（或等高台）水平；可行域内 |cx − 开口中心| 最小，含安装间隙
+      const stepY = Math.min(lh, rh);
+      const packStep = (pose) =>
+        pack("step", pose, {
+          derivedTopGap: Math.max(0, stepY - part.height),
+          supportLeft: { x: Math.max(0, pose.x - halfL), y: stepY },
+          supportRight: { x: Math.min(topW, pose.x + halfL), y: stepY }
+        });
+      const stepPose = { x: clampX(openingCenter), y: stepY - halfH, deg: 0 };
+      if (validPose(part, stepPose, clearance)) return packStep(stepPose);
+      const xLo = halfL + clearance;
+      const xSpan = Math.max(topW - clearance - halfL - xLo, 0);
+      const nStep = Math.max(24, Math.ceil(xSpan / 0.25));
+      let found = null;
+      let foundScore = Infinity;
+      for (let i = 0; i <= nStep; i += 1) {
+        const x = xLo + (xSpan * i) / nStep;
+        const sc = Math.abs(x - openingCenter);
+        if (sc >= foundScore) continue;
+        const trial = { x, y: stepY - halfH, deg: 0 };
+        if (!validPose(part, trial, clearance)) continue;
+        foundScore = sc;
+        found = trial;
+      }
+      return packStep(found || stepPose);
+    }
+
+    function seedFinalCenters(part, options) {
+      const finalPose = finalPlacementPose(part, options);
+      const minX = part.length / 2;
+      const maxX = geom.topWidth - part.length / 2;
+      const centers = [];
+      for (let x = minX; x <= maxX + 0.001; x += geom.grid) centers.push(x);
+      centers.sort((a, b) => Math.abs(a - finalPose.x) - Math.abs(b - finalPose.x));
+      return { finalPose, centers };
+    }
+
+    function searchBounds(gridScale) {
+      const scale = gridScale || 1;
+      const grid = geom.grid * scale;
+      const angles = [];
+      const step = geom.angleStep * (scale > 1 ? 2 : 1);
+      for (let a = geom.minAngle; a <= geom.maxAngle; a += step) angles.push(a);
+      if (!angles.includes(0)) angles.push(0);
+      angles.sort((a, b) => a - b);
+      const gridXCount = Math.round(geom.topWidth / grid) + 1;
+      const gridYCount = Math.round(geom.yMax / grid) + 1;
+      return {
+        grid,
+        gridXCount,
+        gridYCount,
+        angles,
+        zeroAngleIndex: angles.indexOf(0)
+      };
+    }
+
+    function failHintPath(part) {
+      const entryCenter = geom.entryLeft + geom.entryWidth / 2;
+      if (part.length > geom.topWidth) {
+        return [
+          { x: entryCenter, y: geom.cavityHeight + part.height * 2.4, deg: -24 },
+          { x: entryCenter, y: geom.cavityHeight + part.height * 1.2, deg: -24 },
+          { x: geom.topWidth / 2, y: part.height / 2, deg: 0 }
+        ];
+      }
+      return [
+        { x: entryCenter, y: geom.cavityHeight + part.height * 2.4, deg: -36 },
+        { x: entryCenter, y: geom.cavityHeight + part.height * 1.5, deg: -36 },
+        { x: entryCenter, y: geom.cavityHeight + part.height * 0.8, deg: -36 }
+      ];
+    }
+
+    return {
+      mode: "2d",
+      geom,
+      paths: buildCavityPaths(geom),
+      validPose,
+      isEntryPose,
+      findFirstHit,
+      finalPlacementPose,
+      seedFinalCenters,
+      searchBounds,
+      failHintPath,
+      xMinAt: (y) => xMinAt(geom, y),
+      xMaxAt: (y) => xMaxAt(geom, y)
+    };
+  }
+
+  function downsamplePath(path) {
+    if (path.length <= 42) return path;
+    const reduced = [];
+    const stride = Math.max(1, Math.floor(path.length / 38));
+    for (let i = 0; i < path.length; i += stride) reduced.push(path[i]);
+    const last = path[path.length - 1];
+    if (reduced[reduced.length - 1] !== last) reduced.push(last);
+    return reduced;
+  }
+
+  /**
+   * Generic BFS path search over a Space interface.
+   * No mode branches — only space methods.
+   */
+  function findPath(space, part, options) {
+    const clearance = options.clearance || 0;
+    const keepParents = Boolean(options.keepPath);
+    const topGap = options.topGap != null ? options.topGap : 0;
+    const geomTop = space.geom ? space.geom.topWidth : Infinity;
+
+    if (part.length > geomTop) {
+      const hint = space.failHintPath(part);
+      const hitPose = hint[hint.length - 1] || { x: 0, y: 0, deg: 0 };
+      return {
+        ok: false,
+        path: [],
+        firstHit: space.findFirstHit(part, hitPose, clearance) || {
+          pose: hitPose,
+          point: { x: hitPose.x, y: hitPose.y },
+          reason: "长度超过顶部净宽"
+        }
+      };
+    }
+
+    const bounds = space.searchBounds(options.gridScale || 1);
+    const { grid, gridXCount, gridYCount, angles, zeroAngleIndex } = bounds;
+    const nx = gridXCount;
+    const ny = gridYCount;
+    const nCell = nx * ny;
+
+    function stateKey(ix, iy, ia) {
+      return ix + iy * nx + ia * nCell;
+    }
+
+    function poseOf(ix, iy, ia) {
+      return { x: ix * grid, y: iy * grid, deg: angles[ia] };
+    }
+
+    function decodeKey(k) {
+      const ia = Math.floor(k / nCell);
+      const rem = k - ia * nCell;
+      const iy = Math.floor(rem / nx);
+      const ix = rem - iy * nx;
+      return [ix, iy, ia];
+    }
+
+    const queue = [];
+    // 状态数可达数百万：用定长位图代替 Set
+    const seen = new Uint8Array(nCell * angles.length);
+    const parent = keepParents ? new Map() : null;
+    const { finalPose, centers } = space.seedFinalCenters(part, { topGap, clearance });
+
+    // 最终姿态可能带倾角（不等高斜担），按最近离散角播种
+    let finalAngleIndex = zeroAngleIndex;
+    let bestAngDist = Infinity;
+    for (let i = 0; i < angles.length; i += 1) {
+      const d = Math.abs(angles[i] - finalPose.deg);
+      if (d < bestAngDist) {
+        bestAngDist = d;
+        finalAngleIndex = i;
+      }
+    }
+
+    // 种子到最终位姿的直线过渡须无碰撞，否则路径末段会「瞬移」穿墙
+    const finalValid = space.validPose(part, finalPose, clearance);
+    function motionFree(a, b) {
+      const n = Math.max(
+        1,
+        Math.ceil(Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y)) / (grid / 2)),
+        Math.ceil(Math.abs(b.deg - a.deg) / 0.5)
+      );
+      for (let i = 1; i < n; i += 1) {
+        const t = i / n;
+        const pose = {
+          x: a.x + (b.x - a.x) * t,
+          y: a.y + (b.y - a.y) * t,
+          deg: a.deg + (b.deg - a.deg) * t
+        };
+        if (!space.validPose(part, pose, clearance)) return false;
+      }
+      return true;
+    }
+
+    function trySeed(ix, iy, ia) {
+      if (!finalValid) return;
+      if (ix < 0 || ix >= gridXCount || iy < 0 || iy >= gridYCount) return;
+      if (ia < 0 || ia >= angles.length) return;
+      const sk = stateKey(ix, iy, ia);
+      if (seen[sk]) return;
+      const p = poseOf(ix, iy, ia);
+      if (!space.validPose(part, p, clearance)) return;
+      if (!motionFree(p, finalPose)) return;
+      seen[sk] = 1;
+      queue.push(sk);
+      if (parent) parent.set(sk, -1);
+    }
+
+    // 优先精确最终位姿附近
+    const seedIy = Math.round(finalPose.y / grid);
+    for (const cx of centers) {
+      const ix = Math.round(cx / grid);
+      for (let dy = -1; dy <= 1; dy += 1) {
+        trySeed(ix, seedIy + dy, finalAngleIndex);
+      }
+    }
+    // 兜底：仍尝试水平 0°（直壁/等高）
+    if (finalAngleIndex !== zeroAngleIndex) {
+      for (const cx of centers.slice(0, 8)) {
+        const ix = Math.round(cx / grid);
+        trySeed(ix, seedIy, zeroAngleIndex);
+      }
+    }
+
+    const moves = [
+      [1, 0, 0],
+      [-1, 0, 0],
+      [0, 1, 0],
+      [0, -1, 0],
+      [0, 0, 1],
+      [0, 0, -1]
+    ];
+
+    let head = 0;
+    while (head < queue.length) {
+      const sk = queue[head];
+      head += 1;
+      const [ix, iy, ia] = decodeKey(sk);
+      const p = poseOf(ix, iy, ia);
+
+      if (space.isEntryPose(part, p, clearance)) {
+        const found = { ok: true, path: [], firstHit: null };
+        if (parent) {
+          let cursor = sk;
+          while (cursor !== undefined && cursor !== -1) {
+            const parts = decodeKey(cursor);
+            found.path.push(poseOf(parts[0], parts[1], parts[2]));
+            cursor = parent.get(cursor);
+          }
+          const first = found.path[0];
+          const yMax = space.geom.yMax;
+          const extended = {
+            x: first.x,
+            y: Math.min(yMax - part.height / 2, first.y + part.height * 1.2),
+            deg: first.deg
+          };
+          if (space.isEntryPose(part, extended, clearance)) {
+            found.path.unshift(extended);
+          }
+          // 末点种子与 finalPose 之间已验证可直线过渡，追加而非替换
+          found.path.push(finalPose);
+        }
+        return found;
+      }
+
+      for (const [dx, dy, da] of moves) {
+        const nix = ix + dx;
+        const niy = iy + dy;
+        const nia = ia + da;
+        if (nix < 0 || nix >= gridXCount || niy < 0 || niy >= gridYCount || nia < 0 || nia >= angles.length) {
+          continue;
+        }
+        const nsk = stateKey(nix, niy, nia);
+        if (seen[nsk]) continue;
+        const next = poseOf(nix, niy, nia);
+        if (!space.validPose(part, next, clearance)) continue;
+        seen[nsk] = 1;
+        queue.push(nsk);
+        if (parent) parent.set(nsk, sk);
+      }
+    }
+
+    const hint = space.failHintPath(part);
+    let firstHit = null;
+    for (let i = hint.length - 1; i >= 0; i -= 1) {
+      firstHit = space.findFirstHit(part, hint[i], clearance);
+      if (firstHit) break;
+    }
+    if (!firstHit) {
+      firstHit = space.findFirstHit(part, finalPose, clearance);
+    }
+    return { ok: false, path: [], firstHit };
+  }
+
+  function estimateMaxLength(space, height, options) {
+    const clearance = options.clearance || 0;
+    const topGap = options.topGap != null ? options.topGap : space.geom.topGap;
+    const grid = space.geom.grid;
+    let low = 0;
+    let high = space.geom.topWidth;
+    const eps = Math.max(0.05, grid / 2);
+    let guard = 0;
+    while (high - low > eps && guard < 20) {
+      guard += 1;
+      const mid = (low + high) / 2;
+      const part = { length: mid, height };
+      if (findPath(space, part, { clearance, topGap, keepPath: false }).ok) low = mid;
+      else high = mid;
+    }
+    return Math.floor(low * 10) / 10;
+  }
+
+  /** 统一的失败结果（参数错误 / 模式未实现） */
+  function errorResult(error, clearance, mode) {
+    return {
+      ok: false,
+      mode: mode || "2d",
+      path: [],
+      maxLength: null,
+      error,
+      diagnostics: {
+        grid: 0,
+        angleStep: 0,
+        clearance: clearance || 0,
+        margin: null,
+        firstHit: null,
+        warnings: []
+      }
+    };
+  }
+
+  function solve(request) {
+    const mode = request.mode || "2d";
+    // v2：三维请求交给 EISV_CORE3D（eisv-core3d.js 已加载时），不改变 solve 契约
+    if (mode === "3d" && global.EISV_CORE3D) return global.EISV_CORE3D.solve(request);
+    if (mode !== "2d") {
+      return errorResult(`模式 ${mode} 尚未实现（v1 仅支持 2d）。`, 0, mode);
+    }
+
+    const cavity = request.cavity || {};
+    const partIn = request.part || {};
+    const options = request.options || {};
+    const values = {
+      topWidth: cavity.topWidth,
+      entryWidth: cavity.entryWidth,
+      leftInset: cavity.leftInset,
+      rightInset: cavity.rightInset,
+      leftHeight: cavity.leftHeight,
+      rightHeight: cavity.rightHeight,
+      leftOuterRadius: cavity.leftOuterRadius,
+      leftInnerRadius: cavity.leftInnerRadius,
+      rightOuterRadius: cavity.rightOuterRadius,
+      rightInnerRadius: cavity.rightInnerRadius,
+      partLength: partIn.length,
+      partHeight: partIn.height,
+      topGap: options.topGap != null ? options.topGap : 0,
+      clearance: options.clearance != null ? options.clearance : 0
+    };
+
+    const error = validateValues(values);
+    if (error) return errorResult(error, values.clearance);
+
+    const space = createSpace2D(values);
+    const part = { length: values.partLength, height: values.partHeight };
+    const clearance = values.clearance;
+    const topGap = values.topGap;
+
+    let maxLength = null;
+    if (options.estimateMax !== false) {
+      maxLength = estimateMaxLength(space, part.height, { clearance, topGap });
+    }
+
+    const pathResult = findPath(space, part, { clearance, topGap, keepPath: Boolean(options.keepPath) });
+
+    let path = [];
+    if (pathResult.ok) {
+      path = options.keepPath ? downsamplePath(pathResult.path) : pathResult.path;
+    } else if (options.keepPath) {
+      path = space.failHintPath(part);
+    }
+
+    const margin =
+      maxLength != null && pathResult.ok ? Math.round((maxLength - part.length) * 10) / 10 : null;
+
+    return {
+      ok: pathResult.ok,
+      mode: "2d",
+      path,
+      maxLength,
+      error: "",
+      geom: space.geom,
+      paths: space.paths,
+      diagnostics: {
+        grid: space.geom.grid,
+        angleStep: space.geom.angleStep,
+        clearance,
+        margin,
+        firstHit: pathResult.ok ? null : pathResult.firstHit,
+        warnings: []
+      }
+    };
+  }
+
+  function buildSolveRequest(values, options) {
+    return {
+      mode: "2d",
+      cavity: {
+        topWidth: values.topWidth,
+        entryWidth: values.entryWidth,
+        leftInset: values.leftInset,
+        rightInset: values.rightInset,
+        leftHeight: values.leftHeight,
+        rightHeight: values.rightHeight,
+        leftOuterRadius: values.leftOuterRadius,
+        leftInnerRadius: values.leftInnerRadius,
+        rightOuterRadius: values.rightOuterRadius,
+        rightInnerRadius: values.rightInnerRadius
+      },
+      part: {
+        length: values.partLength,
+        height: values.partHeight
+      },
+      options: {
+        clearance: values.clearance || 0,
+        topGap: values.topGap,
+        keepPath: Boolean(options && options.keepPath),
+        estimateMax: options && options.estimateMax === false ? false : true
+      }
+    };
+  }
+
+  const api = {
+    meta,
+    DEFAULTS,
+    formatNumber,
+    formatInputValue,
+    valuesForDraw,
+    validateValues,
+    linkedInputPatch,
+    deriveGeom,
+    buildCavityPaths,
+    createSpace2D,
+    findPath,
+    estimateMaxLength,
+    solve,
+    errorResult,
+    buildSolveRequest,
+    downsamplePath
+  };
+
+  global.EISV_CORE = api;
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = api;
+  }
+})(typeof self !== "undefined" ? self : globalThis);
+
+  </script>
+  <script id="eisv-core3d">
+/**
+ * EISV 3D core (V2) — no DOM. Depends on EISV_CORE (2D core) for the
+ * section-based final placement, BFS path search and shared helpers.
+ *
+ * Coordinates: x = 宽（左→右），z = 深（前→后），y = 自腔顶向下为正（与 2D 一致）。
+ * Pose3D: { x, y, z, yaw, tilt }（度）。
+ *   yaw  = 零件长度方向在水平面内相对 +x 的转角（绕竖直轴，0 → 沿 x，90 → 沿 z）
+ *   tilt = 长度方向绕零件宽度轴的倾角（与 2D 的 deg 同号：正值时沿长度方向向下）
+ * Part3D: { length, width, height }
+ *
+ * 详见 docs/3d.md。
+ */
+(function (global) {
+  "use strict";
+
+  const C2 =
+    global.EISV_CORE || (typeof require === "function" ? require("./eisv-core.js") : null);
+  if (!C2) throw new Error("EISV_CORE (2D core) must be loaded before eisv-core3d.js");
+
+  const meta = {
+    version: "2.0.0",
+    mode: "3d"
+  };
+
+  const DEG = Math.PI / 180;
+  const EPS = 0.001;
+  const FAR = 1e5;
+
+  const DEFAULTS = {
+    topWidth: 212,
+    topDepth: 212,
+    entryWidth: 172,
+    entryDepth: 172,
+    leftInset: 20,
+    rightInset: 20,
+    frontInset: 20,
+    backInset: 20,
+    leftHeight: 50,
+    rightHeight: 50,
+    frontHeight: 50,
+    backHeight: 50,
+    leftOuterRadius: 0,
+    leftInnerRadius: 0,
+    rightOuterRadius: 0,
+    rightInnerRadius: 0,
+    partLength: 200,
+    partWidth: 60,
+    partHeight: 30,
+    topGap: 5,
+    clearance: 0
+  };
+
+  const SIDES = [
+    { key: "left", inset: "leftInset", height: "leftHeight", label: "左" },
+    { key: "right", inset: "rightInset", height: "rightHeight", label: "右" },
+    { key: "front", inset: "frontInset", height: "frontHeight", label: "前" },
+    { key: "back", inset: "backInset", height: "backHeight", label: "后" }
+  ];
+
+  function validateValues(values) {
+    const positive = [
+      ["顶部净宽", values.topWidth],
+      ["顶部净深", values.topDepth],
+      ["开口宽度", values.entryWidth],
+      ["开口深度", values.entryDepth],
+      ["左侧空腔高度", values.leftHeight],
+      ["右侧空腔高度", values.rightHeight],
+      ["前侧空腔高度", values.frontHeight],
+      ["后侧空腔高度", values.backHeight],
+      ["零件长度", values.partLength],
+      ["零件宽度", values.partWidth],
+      ["零件高度", values.partHeight]
+    ];
+    for (const [label, value] of positive) {
+      if (!Number.isFinite(value) || value <= 0) return `${label}必须大于 0。`;
+    }
+    const nonNegative = [
+      ["左侧退进", values.leftInset],
+      ["右侧退进", values.rightInset],
+      ["前侧退进", values.frontInset],
+      ["后侧退进", values.backInset],
+      ["左外角圆角半径", values.leftOuterRadius],
+      ["左内角圆角半径", values.leftInnerRadius],
+      ["右外角圆角半径", values.rightOuterRadius],
+      ["右内角圆角半径", values.rightInnerRadius],
+      ["离顶距离", values.topGap],
+      ["安装间隙", values.clearance]
+    ];
+    for (const [label, value] of nonNegative) {
+      if (!Number.isFinite(value) || value < 0) return `${label}不能小于 0。`;
+    }
+    if (values.leftInset + values.rightInset >= values.topWidth) {
+      return "左右退进之和必须小于顶部净宽。";
+    }
+    if (values.frontInset + values.backInset >= values.topDepth) {
+      return "前后退进之和必须小于顶部净深。";
+    }
+    if (values.leftOuterRadius + values.leftInnerRadius > values.leftInset) {
+      return "左内外圆角半径之和不能大于左侧退进。";
+    }
+    if (values.rightOuterRadius + values.rightInnerRadius > values.rightInset) {
+      return "右内外圆角半径之和不能大于右侧退进。";
+    }
+    if (values.leftOuterRadius > values.leftHeight) {
+      return "左外角圆角半径不能大于左侧空腔高度。";
+    }
+    if (values.rightOuterRadius > values.rightHeight) {
+      return "右外角圆角半径不能大于右侧空腔高度。";
+    }
+    if (Math.abs(values.entryWidth - (values.topWidth - values.leftInset - values.rightInset)) > 0.01) {
+      return "开口宽度应等于顶部净宽减左、右退进。";
+    }
+    if (Math.abs(values.entryDepth - (values.topDepth - values.frontInset - values.backInset)) > 0.01) {
+      return "开口深度应等于顶部净深减前、后退进。";
+    }
+    const heights = SIDES.map((s) => values[s.height]);
+    const cavityMaxH = Math.max(...heights);
+    if (values.partHeight > cavityMaxH) {
+      return "零件高度大于空腔最大高度，无法放入。";
+    }
+    const insetHeights = SIDES.filter((s) => values[s.inset] > EPS).map((s) => values[s.height]);
+    if (insetHeights.length) {
+      if (values.partHeight > Math.min(...insetHeights) + EPS) {
+        return "零件高度大于最矮一侧退台高度，无法落在退台上。";
+      }
+    } else if (values.topGap + values.partHeight > cavityMaxH + EPS) {
+      return "零件高度与离顶距离之和超过空腔高度，无法水平放到顶部。";
+    }
+    if (!insetHeights.length && values.clearance > 0 && values.topGap + EPS < values.clearance) {
+      return "离顶距离与安装间隙互相干涉：最终位姿下零件上表面到顶壁的空隙为离顶距离，须不小于安装间隙。请增大离顶距离，或减小安装间隙。";
+    }
+    if (Object.values(values).some((value) => Number.isFinite(value) && value > 800)) {
+      return "单项尺寸建议不超过 800mm；此工具为浏览器内近似验证。";
+    }
+    return "";
+  }
+
+  /** 仅用于绘图的参数清洗：逐项回退，宽度方向与深度方向分别复用 2D 规则 */
+  function valuesForDraw(values) {
+    const x = C2.valuesForDraw(values);
+    const z = C2.valuesForDraw({
+      topWidth: values.topDepth,
+      leftInset: values.frontInset,
+      rightInset: values.backInset,
+      leftHeight: values.frontHeight,
+      rightHeight: values.backHeight,
+      partLength: values.partWidth,
+      partHeight: values.partHeight,
+      topGap: values.topGap,
+      clearance: values.clearance
+    });
+    return {
+      ...x,
+      topDepth: z.topWidth,
+      entryDepth: z.entryWidth,
+      frontInset: z.leftInset,
+      backInset: z.rightInset,
+      frontHeight: z.leftHeight,
+      backHeight: z.rightHeight,
+      partWidth: Number.isFinite(values.partWidth) && values.partWidth > 0 ? Math.min(values.partWidth, 800) : DEFAULTS.partWidth
+    };
+  }
+
+  /** 联动：宽度方向同 2D（开口宽 ↔ 右退进），深度方向对应（开口深 ↔ 后退进） */
+  function linkedInputPatch(values, changedKey) {
+    const widthKeys = { topWidth: 1, entryWidth: 1, leftInset: 1, rightInset: 1 };
+    const depthMap = {
+      topDepth: "topWidth",
+      entryDepth: "entryWidth",
+      frontInset: "leftInset",
+      backInset: "rightInset"
+    };
+    if (widthKeys[changedKey]) return C2.linkedInputPatch(values, changedKey);
+    if (!depthMap[changedKey]) return {};
+    const patch = C2.linkedInputPatch(
+      {
+        topWidth: values.topDepth,
+        entryWidth: values.entryDepth,
+        leftInset: values.frontInset,
+        rightInset: values.backInset
+      },
+      depthMap[changedKey]
+    );
+    const out = {};
+    if ("rightInset" in patch) out.backInset = patch.rightInset;
+    if ("entryWidth" in patch) out.entryDepth = patch.entryWidth;
+    return out;
+  }
+
+  /** 沿长度方向的 2D 剖面参数（axis "x"：左右剖面；"z"：前后剖面） */
+  function sectionValues(values, axis) {
+    const common = {
+      partLength: values.partLength,
+      partHeight: values.partHeight,
+      topGap: values.topGap,
+      clearance: values.clearance || 0
+    };
+    if (axis === "x") {
+      return {
+        ...common,
+        topWidth: values.topWidth,
+        entryWidth: values.topWidth - values.leftInset - values.rightInset,
+        leftInset: values.leftInset,
+        rightInset: values.rightInset,
+        leftHeight: values.leftHeight,
+        rightHeight: values.rightHeight,
+        leftOuterRadius: values.leftOuterRadius,
+        leftInnerRadius: values.leftInnerRadius,
+        rightOuterRadius: values.rightOuterRadius,
+        rightInnerRadius: values.rightInnerRadius
+      };
+    }
+    return {
+      ...common,
+      topWidth: values.topDepth,
+      entryWidth: values.topDepth - values.frontInset - values.backInset,
+      leftInset: values.frontInset,
+      rightInset: values.backInset,
+      leftHeight: values.frontHeight,
+      rightHeight: values.backHeight,
+      leftOuterRadius: 0,
+      leftInnerRadius: 0,
+      rightOuterRadius: 0,
+      rightInnerRadius: 0
+    };
+  }
+
+  function deriveGeom(values) {
+    const heights = SIDES.map((s) => values[s.height]);
+    const maxH = Math.max(...heights);
+    const insetHeights = SIDES.filter((s) => values[s.inset] > EPS).map((s) => values[s.height]);
+    const W = values.topWidth;
+    const D = values.topDepth;
+    const yMax = maxH + Math.max((values.topGap + values.partHeight) * 3, Math.max(W, D) * 0.55, 90);
+    const maxDim = Math.max(W, D, values.partLength, values.partWidth, yMax);
+    const grid = Math.max(1, Math.ceil(maxDim / 160));
+    return {
+      topWidth: W,
+      topDepth: D,
+      leftInset: values.leftInset,
+      rightInset: values.rightInset,
+      frontInset: values.frontInset,
+      backInset: values.backInset,
+      entryLeft: values.leftInset,
+      entryRight: W - values.rightInset,
+      entryFront: values.frontInset,
+      entryBack: D - values.backInset,
+      entryWidth: W - values.leftInset - values.rightInset,
+      entryDepth: D - values.frontInset - values.backInset,
+      leftHeight: values.leftHeight,
+      rightHeight: values.rightHeight,
+      frontHeight: values.frontHeight,
+      backHeight: values.backHeight,
+      leftOuterRadius: values.leftOuterRadius,
+      leftInnerRadius: values.leftInnerRadius,
+      rightOuterRadius: values.rightOuterRadius,
+      rightInnerRadius: values.rightInnerRadius,
+      maxHeight: maxH,
+      /** 顶部整区（完整 W×D 截面）底面：有退进各侧台顶的最小值；四边无退进时为 ∞ */
+      stageHeight: insetHeights.length ? Math.min(...insetHeights) : Infinity,
+      topGap: values.topGap,
+      yMax,
+      grid,
+      angleStep: 2,
+      yawStep: 5,
+      minAngle: -88,
+      maxAngle: 88
+    };
+  }
+
+  /** 零件局部轴（世界坐标）：u 长度、w 宽度（恒水平）、v 高度 */
+  function poseAxes(pose) {
+    const cy = Math.cos(pose.yaw * DEG);
+    const sy = Math.sin(pose.yaw * DEG);
+    const ct = Math.cos(pose.tilt * DEG);
+    const st = Math.sin(pose.tilt * DEG);
+    return {
+      u: [ct * cy, st, ct * sy],
+      w: [-sy, 0, cy],
+      v: [-st * cy, ct, -st * sy]
+    };
+  }
+
+  function poseCorners(part, pose) {
+    const { u, w, v } = poseAxes(pose);
+    const a = part.length / 2;
+    const b = part.width / 2;
+    const h = part.height / 2;
+    const out = [];
+    for (const su of [-1, 1]) {
+      for (const sw of [-1, 1]) {
+        for (const sv of [-1, 1]) {
+          out.push([
+            pose.x + su * a * u[0] + sw * b * w[0] + sv * h * v[0],
+            pose.y + su * a * u[1] + sw * b * w[1] + sv * h * v[1],
+            pose.z + su * a * u[2] + sw * b * w[2] + sv * h * v[2]
+          ]);
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * OBB（中心 c、轴 B[3]、半长 e[3]）与 AABB（min/max）是否相交：分离轴定理 15 轴。
+   * 相切视为不相交（调用方已把零件内缩 EPS）。
+   */
+  function obbHitsAabb(c, B, e, box) {
+    const be = [
+      (box.max[0] - box.min[0]) / 2,
+      (box.max[1] - box.min[1]) / 2,
+      (box.max[2] - box.min[2]) / 2
+    ];
+    const T = [
+      (box.max[0] + box.min[0]) / 2 - c[0],
+      (box.max[1] + box.min[1]) / 2 - c[1],
+      (box.max[2] + box.min[2]) / 2 - c[2]
+    ];
+    const R = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    const A = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    for (let i = 0; i < 3; i += 1) {
+      for (let j = 0; j < 3; j += 1) {
+        R[i][j] = B[j][i];
+        A[i][j] = Math.abs(R[i][j]) + 1e-9;
+      }
+    }
+    for (let i = 0; i < 3; i += 1) {
+      const rb = e[0] * A[i][0] + e[1] * A[i][1] + e[2] * A[i][2];
+      if (Math.abs(T[i]) > be[i] + rb) return false;
+    }
+    for (let j = 0; j < 3; j += 1) {
+      const ra = be[0] * A[0][j] + be[1] * A[1][j] + be[2] * A[2][j];
+      const t = T[0] * R[0][j] + T[1] * R[1][j] + T[2] * R[2][j];
+      if (Math.abs(t) > ra + e[j]) return false;
+    }
+    for (let i = 0; i < 3; i += 1) {
+      const i1 = (i + 1) % 3;
+      const i2 = (i + 2) % 3;
+      for (let j = 0; j < 3; j += 1) {
+        const j1 = (j + 1) % 3;
+        const j2 = (j + 2) % 3;
+        const ra = be[i1] * A[i2][j] + be[i2] * A[i1][j];
+        const rb = e[j1] * A[i][j2] + e[j2] * A[i][j1];
+        const t = T[i2] * R[i1][j] - T[i1] * R[i2][j];
+        if (Math.abs(t) > ra + rb) return false;
+      }
+    }
+    return true;
+  }
+
+  function createSpace3D(values) {
+    const geom = deriveGeom(values);
+    const secX = C2.createSpace2D(sectionValues(values, "x"));
+    const blockCache = new Map();
+
+    function slabs(y0, y1, r) {
+      const n = Math.max(4, Math.min(24, Math.ceil(r / 0.5)));
+      const out = [];
+      for (let i = 0; i < n; i += 1) out.push([y0 + ((y1 - y0) * i) / n, y0 + ((y1 - y0) * (i + 1)) / n]);
+      return out;
+    }
+
+    /**
+     * 实体块（按安装间隙 c 偏移）：退台块在水平方向向开口侧外扩 c，台顶不偏移（可落台接触），
+     * 与 2D pointFree 语义一致。左右圆角按阶梯盒保守近似（每片取该片内最靠开口的壁位置）。
+     */
+    function blocks(c) {
+      const cached = blockCache.get(c);
+      if (cached) return cached;
+      const { topWidth: W, topDepth: D, leftHeight: lh, rightHeight: rh } = geom;
+      const out = [];
+      const add = (name, min, max) => out.push({ name, min, max });
+      const lo = geom.leftOuterRadius;
+      const li = geom.leftInnerRadius;
+      const ro = geom.rightOuterRadius;
+      const ri = geom.rightInnerRadius;
+      if (lo > 0) {
+        for (const [a, b] of slabs(lh - lo, lh, lo)) add("left", [0, a, 0], [secX.xMinAt(b) + c, b, D]);
+      }
+      if (li > 0) {
+        for (const [a, b] of slabs(lh, lh + li, li)) add("left", [0, a, 0], [secX.xMinAt(b) + c, b, D]);
+      }
+      add("left", [0, lh + li, 0], [geom.entryLeft + c, FAR, D]);
+      if (ro > 0) {
+        for (const [a, b] of slabs(rh - ro, rh, ro)) add("right", [secX.xMaxAt(b) - c, a, 0], [W, b, D]);
+      }
+      if (ri > 0) {
+        for (const [a, b] of slabs(rh, rh + ri, ri)) add("right", [secX.xMaxAt(b) - c, a, 0], [W, b, D]);
+      }
+      add("right", [geom.entryRight - c, rh + ri, 0], [W, FAR, D]);
+      add("front", [0, geom.frontHeight, 0], [W, FAR, geom.entryFront + c]);
+      add("back", [0, geom.backHeight, geom.entryBack - c], [W, FAR, D]);
+      blockCache.set(c, out);
+      return out;
+    }
+
+    function obbOf(part, pose) {
+      const { u, w, v } = poseAxes(pose);
+      const e = [part.length / 2 - EPS, part.width / 2 - EPS, part.height / 2 - EPS];
+      const ext = [0, 1, 2].map((k) => e[0] * Math.abs(u[k]) + e[1] * Math.abs(w[k]) + e[2] * Math.abs(v[k]));
+      return { c: [pose.x, pose.y, pose.z], B: [u, w, v], e, ext };
+    }
+
+    /** 精确位姿校验：零件在外框（墙、顶内缩 c）内，且不与任何实体块相交 */
+    function validPose(part, pose, clearance) {
+      const c = clearance || 0;
+      const o = obbOf(part, pose);
+      if (o.c[0] - o.ext[0] < c || o.c[0] + o.ext[0] > geom.topWidth - c) return false;
+      if (o.c[2] - o.ext[2] < c || o.c[2] + o.ext[2] > geom.topDepth - c) return false;
+      if (o.c[1] - o.ext[1] < c) return false;
+      const list = blocks(c);
+      for (let i = 0; i < list.length; i += 1) {
+        const b = list[i];
+        if (
+          o.c[0] + o.ext[0] <= b.min[0] || o.c[0] - o.ext[0] >= b.max[0] ||
+          o.c[1] + o.ext[1] <= b.min[1] || o.c[1] - o.ext[1] >= b.max[1] ||
+          o.c[2] + o.ext[2] <= b.min[2] || o.c[2] - o.ext[2] >= b.max[2]
+        ) {
+          continue;
+        }
+        if (obbHitsAabb(o.c, o.B, o.e, b)) return false;
+      }
+      return true;
+    }
+
+    /** 开口面：左右台顶连线与前后台顶连线取较低者（y 较大）；零件八角均在其下方即已在腔外 */
+    function rimY(x, z) {
+      const tx = geom.entryWidth > 0 ? Math.max(0, Math.min(1, (x - geom.entryLeft) / geom.entryWidth)) : 0;
+      const tz = geom.entryDepth > 0 ? Math.max(0, Math.min(1, (z - geom.entryFront) / geom.entryDepth)) : 0;
+      return Math.max(
+        geom.leftHeight + (geom.rightHeight - geom.leftHeight) * tx,
+        geom.frontHeight + (geom.backHeight - geom.frontHeight) * tz
+      );
+    }
+
+    /** 入口位姿：开口柱体与开口面下方围成凸区域，八角在内即整体在内 */
+    function isEntryPose(part, pose, clearance) {
+      const c = clearance || 0;
+      for (const [x, y, z] of poseCorners(part, pose)) {
+        if (x < geom.entryLeft + c - EPS || x > geom.entryRight - c + EPS) return false;
+        if (z < geom.entryFront + c - EPS || z > geom.entryBack - c + EPS) return false;
+        if (y < rimY(x, z) + c - EPS) return false;
+      }
+      return true;
+    }
+
+    const blockLabel = { left: "左侧退台", right: "右侧退台", front: "前侧退台", back: "后侧退台" };
+
+    /** 失败诊断：给出第一处干涉的位置与原因 */
+    function findFirstHit(part, pose, clearance) {
+      const c = clearance || 0;
+      if (validPose(part, pose, c)) return null;
+      const tag = (base) => (c > 0 ? `${base}安装间隙不足` : `${base}干涉`);
+      for (const [x, y, z] of poseCorners(part, pose)) {
+        const point = { x, y, z };
+        if (y < -EPS) return { pose, point, reason: "越过顶部边界" };
+        if (c > 0 && y < c - EPS) return { pose, point, reason: "顶侧安装间隙不足（离顶距离须 ≥ 安装间隙）" };
+        if (x < c - EPS) return { pose, point, reason: tag("左侧壁") };
+        if (x > geom.topWidth - c + EPS) return { pose, point, reason: tag("右侧壁") };
+        if (z < c - EPS) return { pose, point, reason: tag("前侧壁") };
+        if (z > geom.topDepth - c + EPS) return { pose, point, reason: tag("后侧壁") };
+      }
+      const o = obbOf(part, pose);
+      for (const b of blocks(c)) {
+        if (!obbHitsAabb(o.c, o.B, o.e, b)) continue;
+        const clampTo = (k) => Math.max(b.min[k], Math.min(Math.min(b.max[k], FAR / 2), o.c[k]));
+        return {
+          pose,
+          point: { x: clampTo(0), y: clampTo(1), z: clampTo(2) },
+          reason: tag(blockLabel[b.name])
+        };
+      }
+      return { pose, point: { x: pose.x, y: pose.y, z: pose.z }, reason: "干涉" };
+    }
+
+    /**
+     * 最终落位（优先级同 docs/placement.md）：
+     * 1 四边无退进 → top 吸顶对中（先沿 x，再沿 z）
+     * 2 有退进 → 依次尝试长度沿 x（yaw 0）、沿 z（yaw 90）：
+     *   零件宽度落在开口内 → 复用 2D 剖面落位（bridge / step，对中）；
+     *   宽度压到横向退台 → 水平落在所覆盖台面的最高处（step），沿长度方向对中。
+     * 结果须通过 3D validPose；都不合法时返回 yaw 0 候选并标 valid:false。
+     */
+    function finalPlacementPose(part, options) {
+      const c = options.clearance || 0;
+      const topGap = options.topGap != null ? options.topGap : geom.topGap;
+      const ocx = geom.entryLeft + geom.entryWidth / 2;
+      const ocz = geom.entryFront + geom.entryDepth / 2;
+      const clamp = (v, half, extent) => Math.max(half + c, Math.min(extent - half - c, v));
+      const noInset = SIDES.every((s) => geom[s.inset] <= EPS);
+      const candidates = [];
+
+      for (const yaw of [0, 90]) {
+        const alongX = yaw === 0;
+        const extentT = alongX ? geom.topDepth : geom.topWidth;
+        const openT0 = alongX ? geom.entryFront : geom.entryLeft;
+        const openT1 = alongX ? geom.entryBack : geom.entryRight;
+        const tc = clamp(alongX ? ocz : ocx, part.width / 2, extentT);
+        const toPose = (s, y, tilt) =>
+          alongX ? { x: s, y, z: tc, yaw, tilt } : { x: tc, y, z: s, yaw, tilt };
+        let pose;
+        let mode;
+
+        if (noInset) {
+          const s = clamp(alongX ? ocx : ocz, part.length / 2, alongX ? geom.topWidth : geom.topDepth);
+          pose = toPose(s, topGap + part.height / 2, 0);
+          mode = "top";
+        } else if (tc - part.width / 2 >= openT0 + c - EPS && tc + part.width / 2 <= openT1 - c + EPS) {
+          const sec = C2.createSpace2D(sectionValues(values, alongX ? "x" : "z"));
+          const p2 = sec.finalPlacementPose(
+            { length: part.length, height: part.height },
+            { topGap, clearance: c }
+          );
+          pose = toPose(p2.x, p2.y, p2.deg);
+          mode = p2.mode;
+        } else {
+          // 宽度压到横向退台：所覆盖台面中最高者（y 最小）承托，水平落位
+          const extentL = alongX ? geom.topWidth : geom.topDepth;
+          const openL0 = alongX ? geom.entryLeft : geom.entryFront;
+          const openL1 = alongX ? geom.entryRight : geom.entryBack;
+          const hL0 = alongX ? geom.leftHeight : geom.frontHeight;
+          const hL1 = alongX ? geom.rightHeight : geom.backHeight;
+          const hT0 = alongX ? geom.frontHeight : geom.leftHeight;
+          const hT1 = alongX ? geom.backHeight : geom.rightHeight;
+          const floorAt = (s) => {
+            const floors = [];
+            if (tc - part.width / 2 < openT0 + c - EPS) floors.push(hT0);
+            if (tc + part.width / 2 > openT1 - c + EPS) floors.push(hT1);
+            if (s - part.length / 2 < openL0 + c - EPS) floors.push(hL0);
+            if (s + part.length / 2 > openL1 - c + EPS) floors.push(hL1);
+            return Math.min(...floors);
+          };
+          const center = clamp(alongX ? ocx : ocz, part.length / 2, extentL);
+          const lo = part.length / 2 + c;
+          const span = Math.max(extentL - c - part.length / 2 - lo, 0);
+          const n = Math.max(24, Math.ceil(span / 0.25));
+          let best = null;
+          for (let i = -1; i <= n; i += 1) {
+            const s = i < 0 ? center : lo + (span * i) / n;
+            const score = Math.abs(s - center);
+            if (best && score >= best.score) continue;
+            const trial = toPose(s, floorAt(s) - part.height / 2, 0);
+            if (!validPose(part, trial, c)) continue;
+            best = { score, pose: trial };
+          }
+          pose = best ? best.pose : toPose(center, floorAt(center) - part.height / 2, 0);
+          mode = "step";
+        }
+        const valid = validPose(part, pose, c);
+        candidates.push({ ...pose, mode, valid });
+        if (valid) break;
+      }
+      return candidates.find((p) => p.valid) || candidates[0];
+    }
+
+    return {
+      mode: "3d",
+      geom,
+      validPose,
+      isEntryPose,
+      findFirstHit,
+      finalPlacementPose,
+      rimY,
+      blocks
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 路径规划
+  // ---------------------------------------------------------------------------
+
+  /** 过锚点、方向 yaw 的水平线与外框 [0,W]×[0,D] 的交段 → 平面坐标 s 的原点与长度 */
+  function lineThrough(geom, ax, az, yaw) {
+    const dx = Math.cos(yaw * DEG);
+    const dz = Math.sin(yaw * DEG);
+    let t0 = -Infinity;
+    let t1 = Infinity;
+    for (const [p, d, hi] of [[ax, dx, geom.topWidth], [az, dz, geom.topDepth]]) {
+      if (Math.abs(d) < 1e-12) continue;
+      const a = (0 - p) / d;
+      const b = (hi - p) / d;
+      t0 = Math.max(t0, Math.min(a, b));
+      t1 = Math.min(t1, Math.max(a, b));
+    }
+    return { ox: ax + t0 * dx, oz: az + t0 * dz, dx, dz, yaw, sMax: Math.max(0, t1 - t0) };
+  }
+
+  /**
+   * 竖直平面内的路径搜索：固定 yaw 与横向位置，搜 (s, y, tilt)。
+   * 通过 Space 适配器复用 2D 核心的 BFS（findPath）；目标谓词由 goal 给出。
+   * 返回 3D 位姿路径（目标端在前、start 在末），或 null。
+   */
+  function planeSearch(space, part, line, start, goal, opts) {
+    const geom = space.geom;
+    const to3D = (p) => ({ x: line.ox + p.x * line.dx, y: p.y, z: line.oz + p.x * line.dz, yaw: line.yaw, tilt: p.deg });
+    const to2D = (p) => ({ x: (p.x - line.ox) * line.dx + (p.z - line.oz) * line.dz, y: p.y, deg: p.tilt });
+    const grid = geom.grid;
+    const adapter = {
+      geom: { topWidth: Infinity, yMax: geom.yMax },
+      searchBounds() {
+        const angles = [];
+        for (let a = geom.minAngle; a <= geom.maxAngle; a += geom.angleStep) angles.push(a);
+        if (!angles.includes(0)) angles.push(0);
+        angles.sort((a, b) => a - b);
+        return {
+          grid,
+          gridXCount: Math.floor(line.sMax / grid) + 1,
+          gridYCount: Math.round(geom.yMax / grid) + 1,
+          angles,
+          zeroAngleIndex: angles.indexOf(0)
+        };
+      },
+      seedFinalCenters() {
+        const finalPose = to2D(start);
+        const centers = [];
+        for (let s = 0; s <= line.sMax + EPS; s += grid) centers.push(s);
+        centers.sort((a, b) => Math.abs(a - finalPose.x) - Math.abs(b - finalPose.x));
+        return { finalPose, centers };
+      },
+      validPose: (_, p, c) => space.validPose(part, to3D(p), c),
+      isEntryPose: (_, p, c) => goal(to3D(p), c),
+      findFirstHit: () => null,
+      failHintPath: () => []
+    };
+    const r = C2.findPath(
+      adapter,
+      { length: part.length, height: part.height },
+      { clearance: opts.clearance, topGap: opts.topGap, keepPath: true }
+    );
+    if (!r.ok) return null;
+    const path = r.path.map(to3D);
+    path[path.length - 1] = start;
+    return path;
+  }
+
+  function motionFree(space, part, a, b, c) {
+    const g = space.geom.grid;
+    const n = Math.max(
+      1,
+      Math.ceil(Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y), Math.abs(b.z - a.z)) / (g / 2)),
+      Math.ceil(Math.max(Math.abs(b.yaw - a.yaw), Math.abs(b.tilt - a.tilt)) / 0.5)
+    );
+    for (let i = 1; i < n; i += 1) {
+      const t = i / n;
+      const p = {
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+        z: a.z + (b.z - a.z) * t,
+        yaw: a.yaw + (b.yaw - a.yaw) * t,
+        tilt: a.tilt + (b.tilt - a.tilt) * t
+      };
+      if (!space.validPose(part, p, c)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * 顶部整区内水平转向：在 y = yRot、tilt = 0 上对 (x, z, yaw) 做 BFS（yaw 以 180° 为周期）。
+   * 从 start 位姿出发遍历整个连通域，返回可查询的可达表与回溯函数。
+   */
+  function turnSearch(space, part, start, yRot, c) {
+    const geom = space.geom;
+    const g = geom.grid;
+    const ys = geom.yawStep;
+    const nx = Math.floor(geom.topWidth / g) + 1;
+    const nz = Math.floor(geom.topDepth / g) + 1;
+    const nk = Math.round(180 / ys);
+    const nCell = nx * nz;
+    const parent = new Int32Array(nCell * nk).fill(-2);
+    const key = (ix, iz, ik) => ix + iz * nx + ik * nCell;
+    const poseOf = (k) => {
+      const ik = Math.floor(k / nCell);
+      const rem = k - ik * nCell;
+      const iz = Math.floor(rem / nx);
+      return { x: (rem - iz * nx) * g, y: yRot, z: iz * g, yaw: ik * ys, tilt: 0 };
+    };
+    const lifted = { ...start, y: yRot, tilt: 0 };
+    const queue = [];
+    if (space.validPose(part, lifted, c) && motionFree(space, part, start, lifted, c)) {
+      const ik0 = ((Math.round(start.yaw / ys) % nk) + nk) % nk;
+      const bx = Math.round(start.x / g);
+      const bz = Math.round(start.z / g);
+      for (let dz = -1; dz <= 1; dz += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          const ix = bx + dx;
+          const iz = bz + dz;
+          if (ix < 0 || ix >= nx || iz < 0 || iz >= nz) continue;
+          const k = key(ix, iz, ik0);
+          if (parent[k] !== -2) continue;
+          const p = poseOf(k);
+          if (!space.validPose(part, p, c) || !motionFree(space, part, p, lifted, c)) continue;
+          parent[k] = -1;
+          queue.push(k);
+        }
+      }
+    }
+    let head = 0;
+    while (head < queue.length) {
+      const k = queue[head];
+      head += 1;
+      const ik = Math.floor(k / nCell);
+      const rem = k - ik * nCell;
+      const iz = Math.floor(rem / nx);
+      const ix = rem - iz * nx;
+      const next = [
+        [ix + 1, iz, ik], [ix - 1, iz, ik], [ix, iz + 1, ik], [ix, iz - 1, ik],
+        [ix, iz, (ik + 1) % nk], [ix, iz, (ik + nk - 1) % nk]
+      ];
+      for (const [jx, jz, jk] of next) {
+        if (jx < 0 || jx >= nx || jz < 0 || jz >= nz) continue;
+        const nkey = key(jx, jz, jk);
+        if (parent[nkey] !== -2) continue;
+        if (!space.validPose(part, poseOf(nkey), c)) {
+          parent[nkey] = -3;
+          continue;
+        }
+        parent[nkey] = k;
+        queue.push(nkey);
+      }
+    }
+    return {
+      lifted,
+      /** 与给定位姿最近、可达、且可直线过渡的网格状态（同 yaw） */
+      nearestReachable(p) {
+        const ik = ((Math.round(p.yaw / ys) % nk) + nk) % nk;
+        const bx = Math.round(p.x / g);
+        const bz = Math.round(p.z / g);
+        for (let dz = -1; dz <= 1; dz += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
+            const ix = bx + dx;
+            const iz = bz + dz;
+            if (ix < 0 || ix >= nx || iz < 0 || iz >= nz) continue;
+            const k = key(ix, iz, ik);
+            if (parent[k] < -1) continue;
+            if (motionFree(space, part, p, poseOf(k), c)) return k;
+          }
+        }
+        return -1;
+      },
+      /** 从状态 k 回溯到起点：返回 [k 的位姿, …, 起点网格位姿] */
+      trace(k) {
+        const out = [];
+        let cur = k;
+        while (cur >= 0) {
+          out.push(poseOf(cur));
+          cur = parent[cur];
+        }
+        return out;
+      }
+    };
+  }
+
+  /** 连续化 yaw（tilt = 0 时 yaw 与 yaw±180 等价；倾斜段同时翻转 tilt 保持姿态不变） */
+  function unwrapYaw(path) {
+    let off = 0;
+    let prev = null;
+    return path.map((p) => {
+      let yaw = p.yaw + off;
+      if (prev != null) {
+        while (yaw - prev > 90) {
+          off -= 180;
+          yaw -= 180;
+        }
+        while (yaw - prev < -90) {
+          off += 180;
+          yaw += 180;
+        }
+      }
+      prev = yaw;
+      const flips = Math.round(off / 180) % 2 !== 0;
+      return { ...p, yaw, tilt: flips ? -p.tilt : p.tilt };
+    });
+  }
+
+  /** 确定性伪随机（mulberry32）：同一输入 → 同一搜索结果 */
+  function makeRandom(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function hashSeed(obj) {
+    const text = JSON.stringify(obj);
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i += 1) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  const wrapDeg = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
+
+  /**
+   * 5 自由度双向快速扩展随机树（RRT-Connect），伪随机种子由输入决定，结果可复现。
+   * 一棵树根在最终位姿，另一棵根在开口下方的一组入口位姿。
+   * 度量：平移 mm + 转角 × 半长（零件端点弧长），边按 ≤ grid/2 的端点位移逐点做精确校验。
+   * 未连通只表示在预算内未找到，与网格搜索的「未找到」同义。
+   */
+  function rrtConnect(space, part, finalPose, c, seed, budget) {
+    const geom = space.geom;
+    const rnd = makeRandom(seed);
+    const r = Math.max(part.length, part.width) / 2;
+    const res = geom.grid / 2;
+    const stepMax = Math.max(8, geom.grid * 5);
+    const maxIter = budget || 3000;
+
+    function dist(a, b) {
+      const ry = r * wrapDeg(b.yaw - a.yaw) * DEG;
+      const rt = r * (b.tilt - a.tilt) * DEG;
+      return Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z, ry, rt);
+    }
+    function lerp(a, b, t) {
+      return {
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+        z: a.z + (b.z - a.z) * t,
+        yaw: a.yaw + wrapDeg(b.yaw - a.yaw) * t,
+        tilt: a.tilt + (b.tilt - a.tilt) * t
+      };
+    }
+    function edgeFree(a, b) {
+      const n = Math.ceil(dist(a, b) / res);
+      for (let i = 1; i <= n; i += 1) {
+        if (!space.validPose(part, lerp(a, b, i / n), c)) return false;
+      }
+      return true;
+    }
+    function makeTree(roots) {
+      return { nodes: roots.slice(), parent: roots.map(() => -1) };
+    }
+    function nearest(tree, q) {
+      let best = 0;
+      let bestD = Infinity;
+      for (let i = 0; i < tree.nodes.length; i += 1) {
+        const d = dist(tree.nodes[i], q);
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+      }
+      return best;
+    }
+    /** 向 q 扩展一步：0 受阻 / 1 前进 / 2 到达 */
+    function extend(tree, q) {
+      const i = nearest(tree, q);
+      const from = tree.nodes[i];
+      const d = dist(from, q);
+      // 受阻时步长减半重试：窄通道（零件贴墙、刚好卡在台面上）也能慢慢长出去
+      for (let step = Math.min(d, stepMax); step >= res; step /= 2) {
+        const reach = step >= d;
+        const to = reach ? q : lerp(from, q, step / d);
+        if (!space.validPose(part, to, c) || !edgeFree(from, to)) continue;
+        tree.nodes.push(to);
+        tree.parent.push(i);
+        return reach ? 2 : 1;
+      }
+      return 0;
+    }
+    function chain(tree, i) {
+      const out = [];
+      for (let k = i; k >= 0; k = tree.parent[k]) out.push(tree.nodes[k]);
+      return out;
+    }
+
+    const ocx = geom.entryLeft + geom.entryWidth / 2;
+    const ocz = geom.entryFront + geom.entryDepth / 2;
+    const entryRoots = [];
+    for (let yaw = 0; yaw < 180; yaw += 15) {
+      for (const tilt of [-70, -45, 0, 45, 70]) {
+        const probe = { x: ocx, y: 0, z: ocz, yaw, tilt };
+        const ext = poseCorners(part, probe).reduce((m, p) => Math.max(m, p[1]), -Infinity);
+        const q = { ...probe, y: geom.maxHeight + c + ext + 1 };
+        if (q.y > geom.yMax) continue;
+        if (space.validPose(part, q, c) && space.isEntryPose(part, q, c)) entryRoots.push(q);
+      }
+    }
+    if (!entryRoots.length) return null;
+
+    let ta = makeTree([finalPose]);
+    let tb = makeTree(entryRoots);
+    let aIsFinal = true;
+    for (let iter = 0; iter < maxIter; iter += 1) {
+      const q = {
+        x: rnd() * geom.topWidth,
+        y: rnd() * geom.yMax,
+        z: rnd() * geom.topDepth,
+        yaw: rnd() * 360,
+        tilt: geom.minAngle + rnd() * (geom.maxAngle - geom.minAngle)
+      };
+      if (extend(ta, q) !== 0) {
+        const qNew = ta.nodes[ta.nodes.length - 1];
+        let status = 1;
+        while (status === 1) status = extend(tb, qNew);
+        if (status === 2) {
+          const fromA = chain(ta, ta.nodes.length - 1);
+          const fromB = chain(tb, tb.nodes.length - 1);
+          // fromX 由连接点指向各自的根；拼成「入口根 → … → 最终位姿」
+          const toFinal = aIsFinal ? fromA : fromB;
+          const toEntry = aIsFinal ? fromB : fromA;
+          return smooth(toEntry.reverse().concat(toFinal.slice(1)));
+        }
+      }
+      [ta, tb] = [tb, ta];
+      aIsFinal = !aIsFinal;
+    }
+    return null;
+
+    function smooth(path) {
+      const p = path.slice();
+      for (let k = 0; k < 80 && p.length > 2; k += 1) {
+        const i = Math.floor(rnd() * (p.length - 2));
+        const j = i + 2 + Math.floor(rnd() * (p.length - i - 2));
+        if (j >= p.length) continue;
+        if (edgeFree(p[i], p[j])) p.splice(i + 1, j - i - 1);
+      }
+      // 加密，保证动画插值时相邻点之间也无碰撞（已校验的边上取点）
+      const out = [p[0]];
+      for (let i = 1; i < p.length; i += 1) {
+        const n = Math.max(1, Math.ceil(dist(p[i - 1], p[i]) / stepMax));
+        for (let t = 1; t <= n; t += 1) out.push(lerp(p[i - 1], p[i], t / n));
+      }
+      return out;
+    }
+  }
+
+  /**
+   * 路径精简：从起点贪心地连到最远的「直线过渡无碰撞」点。
+   * 与 2D 的按步长抽稀不同，保证动画线性插值的每一段都经过校验。
+   */
+  function simplifyPath(space, part, path, c) {
+    if (path.length <= 2) return path.slice();
+    const out = [path[0]];
+    let i = 0;
+    while (i < path.length - 1) {
+      let j = Math.min(path.length - 1, i + 1);
+      for (let k = path.length - 1; k > i + 1; k -= 1) {
+        if (motionFree(space, part, path[i], path[k], c)) {
+          j = k;
+          break;
+        }
+      }
+      out.push(path[j]);
+      i = j;
+    }
+    return out;
+  }
+
+  function failHintPath(space, part, finalPose) {
+    const g = space.geom;
+    const ocx = g.entryLeft + g.entryWidth / 2;
+    const ocz = g.entryFront + g.entryDepth / 2;
+    const yaw = finalPose ? finalPose.yaw : 0;
+    return [
+      { x: ocx, y: g.maxHeight + part.height * 2.4, z: ocz, yaw, tilt: -36 },
+      { x: ocx, y: g.maxHeight + part.height * 1.5, z: ocz, yaw, tilt: -36 },
+      { x: ocx, y: g.maxHeight + part.height * 0.8, z: ocz, yaw, tilt: -36 }
+    ];
+  }
+
+  /**
+   * 装入规划：
+   * A 直入：最终 yaw 所在竖直平面内，从最终位姿搜到入口（与 2D 同理）。
+   * B 斜入转向：最终位姿 → 顶部整区（水平、底面不低于最矮退台顶）→ 水平转向 →
+   *   沿某 yaw 的开口弦平面下行至入口。候选 yaw 按开口弦长由长到短尝试。
+   * C 空间搜索：A、B 都失败时，5 自由度 RRT-Connect（可在倾斜中转向）。
+   * 返回 { ok, path, strategy, entryYaw, finalPose, firstHit }。
+   */
+  function planInsertion(space, part, options) {
+    const c = options.clearance || 0;
+    const topGap = options.topGap;
+    const geom = space.geom;
+    const opts = { clearance: c, topGap };
+    const finalPose = space.finalPlacementPose(part, opts);
+    const entryGoal = (p, cc) => space.isEntryPose(part, p, cc);
+    const fail = () => {
+      let firstHit = null;
+      if (!finalPose.valid) firstHit = space.findFirstHit(part, finalPose, c);
+      const hint = failHintPath(space, part, finalPose);
+      for (let i = hint.length - 1; i >= 0 && !firstHit; i -= 1) firstHit = space.findFirstHit(part, hint[i], c);
+      return { ok: false, path: [], strategy: null, entryYaw: null, finalPose, firstHit };
+    };
+    if (!finalPose.valid) return fail();
+
+    // A 直入
+    const finalLine = lineThrough(geom, finalPose.x, finalPose.z, finalPose.yaw);
+    const direct = planeSearch(space, part, finalLine, finalPose, entryGoal, opts);
+    if (direct) {
+      return { ok: true, path: direct, strategy: "direct", entryYaw: finalPose.yaw, finalPose, firstHit: null };
+    }
+    const tryRrt = () => {
+      const seed = hashSeed([geom.topWidth, geom.topDepth, geom.entryLeft, geom.entryRight,
+        geom.entryFront, geom.entryBack, geom.leftHeight, geom.rightHeight, geom.frontHeight,
+        geom.backHeight, part.length, part.width, part.height, c]);
+      const path = rrtConnect(space, part, finalPose, c, seed);
+      if (!path) return fail();
+      return { ok: true, path: unwrapYaw(path), strategy: "search", entryYaw: path[0].yaw, finalPose, firstHit: null };
+    };
+    if (!Number.isFinite(geom.stageHeight)) return tryRrt();
+
+    // B 斜入转向（水平转向，确定性）
+    const stageBottom = geom.stageHeight;
+    const stageGoal = (p, cc) =>
+      Math.abs(p.tilt) < 1e-9 && p.y + part.height / 2 <= stageBottom + EPS && space.validPose(part, p, cc);
+    const toStage = planeSearch(space, part, finalLine, finalPose, stageGoal, opts);
+    if (!toStage) return tryRrt();
+    const stagePose = toStage[0];
+    const maxOuter = Math.max(geom.leftOuterRadius, geom.rightOuterRadius);
+    const yRot = Math.min(
+      stageBottom - part.height / 2,
+      Math.max(c + part.height / 2, stageBottom - part.height / 2 - maxOuter)
+    );
+    const turn = turnSearch(space, part, stagePose, yRot, c);
+
+    const ocx = geom.entryLeft + geom.entryWidth / 2;
+    const ocz = geom.entryFront + geom.entryDepth / 2;
+    const chord = (yaw) => {
+      const cx = Math.abs(Math.cos(yaw * DEG));
+      const sz = Math.abs(Math.sin(yaw * DEG));
+      return Math.min(cx > 1e-9 ? geom.entryWidth / cx : Infinity, sz > 1e-9 ? geom.entryDepth / sz : Infinity);
+    };
+    const yaws = [];
+    for (let yaw = 0; yaw < 180; yaw += geom.yawStep) {
+      if (Math.abs(((yaw - finalPose.yaw) % 180 + 180) % 180) < 1e-9) continue;
+      yaws.push(yaw);
+    }
+    yaws.sort((a, b) => chord(b) - chord(a));
+
+    for (const yaw of yaws) {
+      const line = lineThrough(geom, ocx, ocz, yaw);
+      // 该开口弦上、转向可达的顶部水平位姿（离开口中心由近及远）
+      const sCenter = (ocx - line.ox) * line.dx + (ocz - line.oz) * line.dz;
+      const tried = new Set();
+      for (let step = 0; step <= line.sMax / geom.grid; step += 1) {
+        const found = [];
+        for (const sign of step === 0 ? [1] : [1, -1]) {
+          const s = sCenter + sign * step * geom.grid;
+          if (s < 0 || s > line.sMax) continue;
+          const p = { x: line.ox + s * line.dx, y: yRot, z: line.oz + s * line.dz, yaw, tilt: 0 };
+          if (!space.validPose(part, p, c)) continue;
+          const k = turn.nearestReachable(p);
+          if (k < 0 || tried.has(k)) continue;
+          tried.add(k);
+          found.push([p, k]);
+        }
+        for (const [entryStage, k] of found) {
+          const up = planeSearch(space, part, line, entryStage, entryGoal, opts);
+          if (!up) continue;
+          const turnPath = turn.trace(k);
+          const path = unwrapYaw(
+            up.concat(turnPath, [turn.lifted], toStage)
+          );
+          return { ok: true, path, strategy: "turn", entryYaw: yaw, finalPose, firstHit: null };
+        }
+        if (tried.size >= 3) break;
+      }
+    }
+    // C 5 自由度空间搜索（倾斜中转向）
+    return tryRrt();
+  }
+
+  function estimateMaxLength(values, options) {
+    const c = options.clearance || 0;
+    let low = 0;
+    let high = Math.hypot(values.topWidth, values.topDepth);
+    const probe = createSpace3D(values);
+    const eps = Math.max(0.1, probe.geom.grid / 2);
+    let guard = 0;
+    while (high - low > eps && guard < 20) {
+      guard += 1;
+      const mid = (low + high) / 2;
+      const space = createSpace3D({ ...values, partLength: mid });
+      const part = { length: mid, width: values.partWidth, height: values.partHeight };
+      if (planInsertion(space, part, { clearance: c, topGap: values.topGap }).ok) low = mid;
+      else high = mid;
+    }
+    return Math.floor(low * 10) / 10;
+  }
+
+  function valuesFromRequest(request) {
+    const cavity = request.cavity || {};
+    const part = request.part || {};
+    const options = request.options || {};
+    return {
+      topWidth: cavity.topWidth,
+      topDepth: cavity.topDepth,
+      entryWidth: cavity.entryWidth,
+      entryDepth: cavity.entryDepth,
+      leftInset: cavity.leftInset,
+      rightInset: cavity.rightInset,
+      frontInset: cavity.frontInset,
+      backInset: cavity.backInset,
+      leftHeight: cavity.leftHeight,
+      rightHeight: cavity.rightHeight,
+      frontHeight: cavity.frontHeight,
+      backHeight: cavity.backHeight,
+      leftOuterRadius: cavity.leftOuterRadius || 0,
+      leftInnerRadius: cavity.leftInnerRadius || 0,
+      rightOuterRadius: cavity.rightOuterRadius || 0,
+      rightInnerRadius: cavity.rightInnerRadius || 0,
+      partLength: part.length,
+      partWidth: part.width,
+      partHeight: part.height,
+      topGap: options.topGap != null ? options.topGap : 0,
+      clearance: options.clearance != null ? options.clearance : 0
+    };
+  }
+
+  function solve(request) {
+    if ((request.mode || "3d") !== "3d") {
+      return C2.errorResult(`EISV_CORE3D 只处理 3d 请求，收到 ${request.mode}。`, 0, request.mode);
+    }
+    const options = request.options || {};
+    const values = valuesFromRequest(request);
+    const error = validateValues(values);
+    if (error) return C2.errorResult(error, values.clearance, "3d");
+
+    const space = createSpace3D(values);
+    const part = { length: values.partLength, width: values.partWidth, height: values.partHeight };
+    const plan = planInsertion(space, part, { clearance: values.clearance, topGap: values.topGap });
+    const maxLength = options.estimateMax === false ? null : estimateMaxLength(values, options);
+
+    let path = [];
+    if (options.keepPath) {
+      path = plan.ok
+        ? simplifyPath(space, part, plan.path, values.clearance)
+        : failHintPath(space, part, plan.finalPose);
+    }
+    const margin =
+      maxLength != null && plan.ok ? Math.round((maxLength - part.length) * 10) / 10 : null;
+    return {
+      ok: plan.ok,
+      mode: "3d",
+      path,
+      maxLength,
+      error: "",
+      geom: space.geom,
+      finalPose: plan.finalPose,
+      diagnostics: {
+        grid: space.geom.grid,
+        angleStep: space.geom.angleStep,
+        yawStep: space.geom.yawStep,
+        clearance: values.clearance,
+        margin,
+        strategy: plan.strategy,
+        entryYaw: plan.entryYaw,
+        firstHit: plan.ok ? null : plan.firstHit,
+        warnings: []
+      }
+    };
+  }
+
+  function buildSolveRequest(values, options) {
+    return {
+      mode: "3d",
+      cavity: {
+        topWidth: values.topWidth,
+        topDepth: values.topDepth,
+        entryWidth: values.entryWidth,
+        entryDepth: values.entryDepth,
+        leftInset: values.leftInset,
+        rightInset: values.rightInset,
+        frontInset: values.frontInset,
+        backInset: values.backInset,
+        leftHeight: values.leftHeight,
+        rightHeight: values.rightHeight,
+        frontHeight: values.frontHeight,
+        backHeight: values.backHeight,
+        leftOuterRadius: values.leftOuterRadius,
+        leftInnerRadius: values.leftInnerRadius,
+        rightOuterRadius: values.rightOuterRadius,
+        rightInnerRadius: values.rightInnerRadius
+      },
+      part: { length: values.partLength, width: values.partWidth, height: values.partHeight },
+      options: {
+        clearance: values.clearance || 0,
+        topGap: values.topGap,
+        keepPath: Boolean(options && options.keepPath),
+        estimateMax: !(options && options.estimateMax === false)
+      }
+    };
+  }
+
+  const api = {
+    meta,
+    DEFAULTS,
+    SIDES,
+    valuesForDraw,
+    validateValues,
+    linkedInputPatch,
+    sectionValues,
+    deriveGeom,
+    poseAxes,
+    poseCorners,
+    obbHitsAabb,
+    createSpace3D,
+    planInsertion,
+    estimateMaxLength,
+    solve,
+    buildSolveRequest,
+    /** 供测试直接调用各阶段 */
+    internals: { rrtConnect, planeSearch, lineThrough, unwrapYaw, simplifyPath, motionFree }
+  };
+
+  global.EISV_CORE3D = api;
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = api;
+  }
+})(typeof self !== "undefined" ? self : globalThis);
+
+  </script>
+  <script>
+/**
+ * EISV V2 view + app (3D) — browser only. Depends on globals EISV_CORE and EISV_CORE3D.
+ * 四视图：主视图 (x–y)、左视图 (z–y)、俯视图 (x–z)、轴测图。
+ */
+(function () {
+  "use strict";
+
+  const C = window.EISV_CORE;
+  const C3 = window.EISV_CORE3D;
+  if (!C || !C3) {
+    console.error("EISV_CORE / EISV_CORE3D missing");
+    return;
+  }
+
+  const SVG_NS = "http://www.w3.org/2000/svg";
+
+  const URL_KEYS = {
+    tw: "topWidth",
+    td: "topDepth",
+    ew: "entryWidth",
+    ed: "entryDepth",
+    li: "leftInset",
+    ri: "rightInset",
+    fi: "frontInset",
+    bi: "backInset",
+    lh: "leftHeight",
+    rh: "rightHeight",
+    fh: "frontHeight",
+    bh: "backHeight",
+    lor: "leftOuterRadius",
+    lir: "leftInnerRadius",
+    ror: "rightOuterRadius",
+    rir: "rightInnerRadius",
+    pl: "partLength",
+    pw: "partWidth",
+    ph: "partHeight",
+    tg: "topGap",
+    cl: "clearance"
+  };
+
+  const D0 = C3.DEFAULTS;
+  /** 常见凹位预设 */
+  const PRESETS = [
+    { id: "default", label: "四边退进·斜入", values: { ...D0 } },
+    {
+      id: "single",
+      label: "单侧退进",
+      values: {
+        ...D0,
+        topDepth: 150,
+        entryDepth: 150,
+        leftInset: 0,
+        rightInset: 20,
+        entryWidth: 192,
+        frontInset: 0,
+        backInset: 0,
+        partLength: 200,
+        partWidth: 100,
+        partHeight: 40
+      }
+    },
+    { id: "narrow", label: "窄长件", values: { ...D0, partLength: 205, partWidth: 40 } },
+    {
+      id: "asymmetric",
+      label: "左右不等高",
+      values: {
+        ...D0,
+        topWidth: 240,
+        entryWidth: 200,
+        leftHeight: 40,
+        rightHeight: 55,
+        frontHeight: 60,
+        backHeight: 60,
+        partLength: 220,
+        partWidth: 60,
+        partHeight: 20
+      }
+    },
+    {
+      id: "deep",
+      label: "沿深度放",
+      values: { ...D0, topDepth: 300, entryDepth: 260, partLength: 250, partWidth: 60 }
+    },
+    {
+      id: "fillet",
+      label: "圆角收口",
+      values: {
+        ...D0,
+        topWidth: 300,
+        entryWidth: 260,
+        partLength: 275,
+        leftOuterRadius: 10,
+        leftInnerRadius: 5,
+        rightOuterRadius: 10,
+        rightInnerRadius: 5
+      }
+    }
+  ];
+
+  const FIELD_KEYS = Object.keys(D0);
+  const inputs = {};
+  FIELD_KEYS.forEach(function (key) {
+    inputs[key] = document.getElementById(`${key}Input`);
+  });
+
+  const result = document.getElementById("result");
+  const resultTitle = document.getElementById("resultTitle");
+  const resultCopy = document.getElementById("resultCopy");
+  const maxLengthEl = document.getElementById("maxLength");
+  const partMetric = document.getElementById("partMetric");
+  const strategyMetric = document.getElementById("strategyMetric");
+  const placeMetric = document.getElementById("placeMetric");
+  const topMetric = document.getElementById("topMetric");
+  const entryMetric = document.getElementById("entryMetric");
+  const validateBtn = document.getElementById("validateBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const replayBtn = document.getElementById("replayBtn");
+  const copyBtn = document.getElementById("copyBtn");
+
+  let lastPath = [];
+  let lastCanFit = false;
+  let lastResult = null;
+  let lastSummary = "";
+  let animationId = null;
+  /** 当前图纸参数下的几何、零件与最终落位（每次 updateDiagram 只算一次） */
+  let active = null;
+  let solveToken = 0;
+  let debounceTimer = null;
+  let worker = null;
+  let workerSource = "";
+  let workerDisabled = false;
+  /** 正在 Worker 中计算的任务：{ token, request, values, animate } */
+  let pendingJob = null;
+
+  // ---------------------------------------------------------------------------
+  // 视图
+  // ---------------------------------------------------------------------------
+
+  function svgEl(tag, attrs, parent) {
+    const node = document.createElementNS(SVG_NS, tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      node.setAttribute(k, attrs[k]);
+    });
+    if (parent) parent.appendChild(node);
+    return node;
+  }
+
+  const ISO_C = Math.cos(Math.PI / 6);
+  const views = {
+    front: { svg: document.getElementById("viewFront"), proj: (p) => [p[0], p[1]] },
+    side: { svg: document.getElementById("viewSide"), proj: (p) => [p[2], p[1]] },
+    top: { svg: document.getElementById("viewTop"), proj: (p) => [p[0], (active ? active.geom.topDepth : 0) - p[2]] },
+    // 自下前方看向凹腔：越靠右、越靠后越低
+    iso: { svg: document.getElementById("viewIso"), proj: (p) => [(p[0] - p[2]) * ISO_C, p[1] + (p[0] + p[2]) * 0.5] }
+  };
+
+  Object.keys(views).forEach(function (name) {
+    const v = views[name];
+    v.cavity = svgEl("g", {}, v.svg);
+    v.dims = svgEl("g", {}, v.svg);
+    v.travel = svgEl("path", { class: "path-line draft-aux", d: "" }, v.svg);
+    v.ghost = svgEl("polygon", { class: "ghost-poly" }, v.svg);
+    v.part = svgEl("g", {}, v.svg);
+    v.partPoly = svgEl("polygon", { class: "part-poly" }, v.part);
+    v.partEdges = name === "iso" ? svgEl("path", { class: "part-edge" }, v.part) : null;
+    v.hit = svgEl("g", { visibility: "hidden" }, v.svg);
+    v.hitDot = svgEl("circle", { class: "hit-dot", r: "2.4" }, v.hit);
+    v.hitLabel = svgEl("text", { class: "hit-label" }, v.hit);
+  });
+
+  const fmt = (n) => C.formatNumber(n);
+  const pt = (xy) => `${xy[0].toFixed(2)},${xy[1].toFixed(2)}`;
+
+  function hull(points) {
+    const p = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    const lower = [];
+    for (const q of p) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0) lower.pop();
+      lower.push(q);
+    }
+    const upper = [];
+    for (let i = p.length - 1; i >= 0; i -= 1) {
+      const q = p[i];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0) upper.pop();
+      upper.push(q);
+    }
+    return lower.slice(0, -1).concat(upper.slice(0, -1));
+  }
+
+  function line(g, a, b, cls) {
+    return svgEl("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], class: cls }, g);
+  }
+
+  function text(g, xy, value, anchor, cls) {
+    const t = svgEl("text", {
+      x: xy[0],
+      y: xy[1],
+      class: cls || "dim-text",
+      "text-anchor": anchor || "middle",
+      "dominant-baseline": "middle"
+    }, g);
+    t.textContent = value;
+    return t;
+  }
+
+  /** 水平尺寸（图上方或下方），与 V1 制图参数同量级 */
+  function hDim(g, x1, x2, yRef, yDim, value, s) {
+    const dir = yDim < yRef ? -1 : 1;
+    line(g, [x1, yRef + dir * 1.8 * s], [x1, yDim + dir * 2.2 * s], "dim-ext draft-thin");
+    line(g, [x2, yRef + dir * 1.8 * s], [x2, yDim + dir * 2.2 * s], "dim-ext draft-thin");
+    line(g, [x1, yDim], [x2, yDim], "dim-line draft-thin");
+    text(g, [(x1 + x2) / 2, yDim + dir * 5 * s], fmt(value));
+  }
+
+  function vDim(g, y1, y2, xRef, xDim, value, s) {
+    const dir = xDim < xRef ? -1 : 1;
+    line(g, [xRef + dir * 1.8 * s, y1], [xDim + dir * 2.2 * s, y1], "dim-ext draft-thin");
+    line(g, [xRef + dir * 1.8 * s, y2], [xDim + dir * 2.2 * s, y2], "dim-ext draft-thin");
+    line(g, [xDim, y1], [xDim, y2], "dim-line draft-thin");
+    text(g, [xDim + dir * 3 * s, (y1 + y2) / 2], fmt(value), dir < 0 ? "end" : "start");
+  }
+
+  function setViewBox(view, minX, minY, maxX, maxY, pad) {
+    view.svg.setAttribute("viewBox", `${minX - pad} ${minY - pad} ${maxX - minX + pad * 2} ${maxY - minY + pad * 2}`);
+    view.svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  }
+
+  /** 剖面视图：复用 2D 核心的空腔轮廓，另一方向的台面画成虚线（不可见轮廓） */
+  function drawSection(view, v, geom, axis) {
+    const sec = C.deriveGeom(C3.sectionValues(v, axis));
+    sec.yMax = geom.yMax;
+    const paths = C.buildCavityPaths(sec);
+    svgEl("path", { d: paths.fill, class: "cavity-fill" }, view.cavity);
+    svgEl("path", { d: paths.stroke, class: "draft-thick" }, view.cavity);
+    line(view.cavity, [sec.entryLeft, sec.leftHeight], [sec.entryRight, sec.rightHeight], "draft-dash");
+    const other = axis === "x"
+      ? [[v.frontInset, v.frontHeight], [v.backInset, v.backHeight]]
+      : [[v.leftInset, v.leftHeight], [v.rightInset, v.rightHeight]];
+    other.forEach(function (o) {
+      if (o[0] > 0.001) line(view.cavity, [0, o[1]], [sec.topWidth, o[1]], "hidden-line");
+    });
+    const extent = sec.topWidth;
+    const pad = Math.max(28, extent * 0.14);
+    const s = Math.max(0.85, Math.min(1.35, extent / 200));
+    hDim(view.dims, 0, extent, 0, -pad * 0.45, extent, s);
+    vDim(view.dims, 0, sec.leftHeight, 0, -pad * 0.35, sec.leftHeight, s);
+    vDim(view.dims, 0, sec.rightHeight, extent, extent + pad * 0.35, sec.rightHeight, s);
+    const names = axis === "x" ? ["左", "右"] : ["前", "后"];
+    text(view.dims, [4 * s, geom.yMax - 6 * s], names[0], "start", "axis-label");
+    text(view.dims, [extent - 4 * s, geom.yMax - 6 * s], names[1], "end", "axis-label");
+    setViewBox(view, 0, 0, extent, geom.yMax, pad);
+  }
+
+  function drawTop(view, geom) {
+    const P = view.proj;
+    const W = geom.topWidth;
+    const Dp = geom.topDepth;
+    const outer = [[0, 0, 0], [W, 0, 0], [W, 0, Dp], [0, 0, Dp]].map(P);
+    svgEl("polygon", { points: outer.map(pt).join(" "), class: "draft-thick" }, view.cavity);
+    const open = [
+      [geom.entryLeft, 0, geom.entryFront],
+      [geom.entryRight, 0, geom.entryFront],
+      [geom.entryRight, 0, geom.entryBack],
+      [geom.entryLeft, 0, geom.entryBack]
+    ].map(P);
+    svgEl("polygon", { points: open.map(pt).join(" "), class: "cavity-fill" }, view.cavity);
+    svgEl("polygon", { points: open.map(pt).join(" "), class: "draft-thin" }, view.cavity);
+    const extent = Math.max(W, Dp);
+    const pad = Math.max(28, extent * 0.14);
+    const s = Math.max(0.85, Math.min(1.35, extent / 200));
+    hDim(view.dims, geom.entryLeft, geom.entryRight, Dp, Dp + pad * 0.45, geom.entryWidth, s);
+    vDim(view.dims, Dp - geom.entryBack, Dp - geom.entryFront, W, W + pad * 0.35, geom.entryDepth, s);
+    text(view.dims, [W / 2, Dp - 6 * s], "前", "middle", "axis-label");
+    text(view.dims, [W / 2, 6 * s], "后", "middle", "axis-label");
+    setViewBox(view, 0, 0, W, Dp, pad);
+  }
+
+  function drawIso(view, geom) {
+    const P = view.proj;
+    const W = geom.topWidth;
+    const Dp = geom.topDepth;
+    const g = geom;
+    const poly = (pts, cls) => svgEl("polygon", { points: pts.map(P).map(pt).join(" "), class: cls }, view.cavity);
+    // 四面侧壁与腔顶（细线），开口边沿（粗线）
+    poly([[0, 0, 0], [W, 0, 0], [W, 0, Dp], [0, 0, Dp]], "cavity-fill");
+    poly([[0, 0, 0], [0, 0, Dp], [0, g.leftHeight, Dp], [0, g.leftHeight, 0]], "draft-thin");
+    poly([[W, 0, 0], [W, 0, Dp], [W, g.rightHeight, Dp], [W, g.rightHeight, 0]], "draft-thin");
+    poly([[0, 0, 0], [W, 0, 0], [W, g.frontHeight, 0], [0, g.frontHeight, 0]], "draft-thin");
+    poly([[0, 0, Dp], [W, 0, Dp], [W, g.backHeight, Dp], [0, g.backHeight, Dp]], "draft-thin");
+    const rim = [
+      [[g.entryLeft, g.leftHeight, g.entryFront], [g.entryLeft, g.leftHeight, g.entryBack]],
+      [[g.entryRight, g.rightHeight, g.entryFront], [g.entryRight, g.rightHeight, g.entryBack]],
+      [[g.entryLeft, g.frontHeight, g.entryFront], [g.entryRight, g.frontHeight, g.entryFront]],
+      [[g.entryLeft, g.backHeight, g.entryBack], [g.entryRight, g.backHeight, g.entryBack]]
+    ];
+    rim.forEach(function (seg) {
+      line(view.cavity, P(seg[0]), P(seg[1]), "draft-thick");
+    });
+    const box = [];
+    for (const x of [0, W]) for (const y of [0, g.yMax]) for (const z of [0, Dp]) box.push(P([x, y, z]));
+    const xs = box.map((q) => q[0]);
+    const ys = box.map((q) => q[1]);
+    const extent = Math.max(...xs) - Math.min(...xs);
+    setViewBox(view, Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys), Math.max(16, extent * 0.06));
+  }
+
+  function projectPart(view, pose) {
+    const corners = C3.poseCorners(active.part, pose).map(view.proj);
+    return corners;
+  }
+
+  function setPartPose(pose, blocked) {
+    if (!pose || !active) return;
+    Object.keys(views).forEach(function (name) {
+      const view = views[name];
+      const corners = projectPart(view, pose);
+      view.partPoly.setAttribute("points", hull(corners).map(pt).join(" "));
+      if (view.partEdges) {
+        let d = "";
+        for (let i = 0; i < 8; i += 1) {
+          for (const bit of [1, 2, 4]) {
+            if (i & bit) continue;
+            d += `M${pt(corners[i])}L${pt(corners[i | bit])}`;
+          }
+        }
+        view.partEdges.setAttribute("d", d);
+      }
+      view.part.classList.toggle("blocked", Boolean(blocked));
+    });
+  }
+
+  function drawGhost(pose) {
+    Object.keys(views).forEach(function (name) {
+      const view = views[name];
+      view.ghost.setAttribute("points", hull(projectPart(view, pose)).map(pt).join(" "));
+    });
+  }
+
+  function drawTravelPath(path) {
+    Object.keys(views).forEach(function (name) {
+      const view = views[name];
+      const d = path
+        .map((p, i) => `${i === 0 ? "M" : "L"} ${pt(view.proj([p.x, p.y, p.z]))}`)
+        .join(" ");
+      view.travel.setAttribute("d", d);
+    });
+  }
+
+  function showHitMarker(firstHit) {
+    Object.keys(views).forEach(function (name) {
+      const view = views[name];
+      if (!firstHit || !firstHit.point) {
+        view.hit.setAttribute("visibility", "hidden");
+        return;
+      }
+      const xy = view.proj([firstHit.point.x, firstHit.point.y, firstHit.point.z]);
+      view.hit.setAttribute("visibility", "visible");
+      view.hitDot.setAttribute("cx", xy[0].toFixed(1));
+      view.hitDot.setAttribute("cy", xy[1].toFixed(1));
+      view.hitLabel.setAttribute("x", (xy[0] + 6).toFixed(1));
+      view.hitLabel.setAttribute("y", (xy[1] - 6).toFixed(1));
+      view.hitLabel.textContent = name === "front" ? firstHit.reason || "干涉" : "";
+    });
+  }
+
+  function cancelPartAnimation() {
+    if (animationId != null) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+  }
+
+  function updateDiagram(rawValues) {
+    cancelPartAnimation();
+    const v = C3.valuesForDraw(rawValues);
+    const geom = C3.deriveGeom(v);
+    const part = { length: v.partLength, width: v.partWidth, height: v.partHeight };
+    const space = C3.createSpace3D(v);
+    const finalPose = space.finalPlacementPose(part, { topGap: v.topGap, clearance: v.clearance || 0 });
+    active = { values: v, geom, part, finalPose };
+
+    Object.keys(views).forEach(function (name) {
+      views[name].cavity.replaceChildren();
+      views[name].dims.replaceChildren();
+    });
+    drawSection(views.front, v, geom, "x");
+    drawSection(views.side, v, geom, "z");
+    drawTop(views.top, geom);
+    drawIso(views.iso, geom);
+
+    drawGhost(finalPose);
+    setPartPose(finalPose, false);
+    drawTravelPath([]);
+    showHitMarker(null);
+    updateMetrics(rawValues, geom);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 动画
+  // ---------------------------------------------------------------------------
+
+  function poseDistance(a, b) {
+    const r = active ? Math.max(active.part.length, active.part.width) / 2 : 100;
+    return Math.hypot(
+      b.x - a.x,
+      b.y - a.y,
+      b.z - a.z,
+      (r * (b.yaw - a.yaw) * Math.PI) / 180,
+      (r * (b.tilt - a.tilt) * Math.PI) / 180
+    );
+  }
+
+  function animatePath(path, blockedAtEnd) {
+    cancelPartAnimation();
+    if (!path.length) return;
+    // 按位姿弧长分配时间，转向段与平移段速度一致
+    const cum = [0];
+    for (let i = 1; i < path.length; i += 1) cum.push(cum[i - 1] + poseDistance(path[i - 1], path[i]));
+    const total = cum[cum.length - 1] || 1;
+    const duration = Math.max(1700, Math.min(5200, 1200 + total * 6));
+    const startTime = performance.now() + 350;
+    const endPose = active ? active.finalPose : path[path.length - 1];
+    setPartPose(path[0], false);
+
+    function tick(now) {
+      if (now < startTime) {
+        animationId = requestAnimationFrame(tick);
+        return;
+      }
+      const t = Math.min(1, (now - startTime) / duration);
+      if (t >= 1) {
+        setPartPose(blockedAtEnd ? path[path.length - 1] : endPose, blockedAtEnd);
+        animationId = null;
+        return;
+      }
+      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      const target = eased * total;
+      let i = 1;
+      while (i < cum.length - 1 && cum[i] < target) i += 1;
+      const seg = cum[i] - cum[i - 1] || 1;
+      const k = Math.max(0, Math.min(1, (target - cum[i - 1]) / seg));
+      const a = path[i - 1];
+      const b = path[i];
+      setPartPose(
+        {
+          x: a.x + (b.x - a.x) * k,
+          y: a.y + (b.y - a.y) * k,
+          z: a.z + (b.z - a.z) * k,
+          yaw: a.yaw + (b.yaw - a.yaw) * k,
+          tilt: a.tilt + (b.tilt - a.tilt) * k
+        },
+        false
+      );
+      animationId = requestAnimationFrame(tick);
+    }
+    animationId = requestAnimationFrame(tick);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 结果
+  // ---------------------------------------------------------------------------
+
+  const MODE_LABEL = { top: "吸顶", step: "落台", bridge: "斜担" };
+
+  function strategyText(solveResult) {
+    const dg = solveResult.diagnostics || {};
+    if (!solveResult.ok || !dg.strategy) return "--";
+    const yaw = Math.round(((dg.entryYaw % 180) + 180) % 180);
+    if (dg.strategy === "direct") return "直入";
+    if (dg.strategy === "turn") return `斜入 ${yaw}° · 顶部转正`;
+    return `空间搜索 · 入口 ${yaw}°`;
+  }
+
+  function placeText(pose) {
+    if (!pose) return "--";
+    const dir = Math.round(pose.yaw) % 180 === 0 ? "长向沿宽" : "长向沿深";
+    return `${MODE_LABEL[pose.mode] || pose.mode} · ${dir}`;
+  }
+
+  function setResultState(kind, title, copy) {
+    result.classList.remove("ok", "fail", "wait");
+    result.classList.add(kind);
+    resultTitle.textContent = title;
+    resultCopy.textContent = copy;
+  }
+
+  function updateMetrics(values, geom) {
+    partMetric.textContent = `${fmt(values.partLength)}×${fmt(values.partWidth)}×${fmt(values.partHeight)} · 顶${fmt(values.topGap)} · 隙${fmt(values.clearance)}`;
+    topMetric.textContent = `${fmt(values.topWidth)} × ${fmt(values.topDepth)}`;
+    entryMetric.textContent = `${fmt(geom.entryWidth)} × ${fmt(geom.entryDepth)}`;
+    placeMetric.textContent = active ? placeText(active.finalPose) : "--";
+  }
+
+  function partLabel(values) {
+    return `${fmt(values.partLength)}×${fmt(values.partWidth)}×${fmt(values.partHeight)}`;
+  }
+
+  function applySolveResult(solveResult, values, opts) {
+    lastResult = solveResult;
+    const animate = opts && opts.animate;
+
+    if (solveResult.error) {
+      setResultState("fail", "尺寸有误", solveResult.error);
+      maxLengthEl.textContent = "--";
+      strategyMetric.textContent = "--";
+      replayBtn.disabled = true;
+      copyBtn.disabled = false;
+      lastPath = [];
+      lastCanFit = false;
+      lastSummary = buildSummary(values, solveResult, "尺寸有误");
+      showHitMarker(null);
+      return;
+    }
+
+    maxLengthEl.textContent = solveResult.maxLength != null ? `约 ${solveResult.maxLength.toFixed(1)} mm` : "--";
+    strategyMetric.textContent = strategyText(solveResult);
+    lastPath = solveResult.path || [];
+    lastCanFit = solveResult.ok;
+    drawTravelPath(lastPath);
+    showHitMarker(solveResult.ok ? null : solveResult.diagnostics.firstHit);
+    replayBtn.disabled = !lastPath.length;
+    copyBtn.disabled = false;
+
+    if (solveResult.ok) {
+      const margin = solveResult.diagnostics.margin;
+      const critical =
+        solveResult.maxLength != null &&
+        Math.abs(values.partLength - solveResult.maxLength) <= Math.max(0.5, solveResult.diagnostics.grid || 1);
+      const marginText = margin != null ? `余量约 ${fmt(margin)} mm。` : "";
+      setResultState(
+        "ok",
+        critical ? "接近临界，可放入" : "可放入",
+        `${partLabel(values)} 可从下方开口装入并落位（${strategyText(solveResult)}，间隙 ${fmt(values.clearance)}mm）。${marginText}`
+      );
+    } else {
+      const hit = solveResult.diagnostics.firstHit;
+      setResultState(
+        "fail",
+        "不可放入",
+        `${partLabel(values)} 在当前凹腔与装入方式下会发生干涉。${hit ? `示意干涉：${hit.reason}。` : ""}`
+      );
+    }
+
+    lastSummary = buildSummary(values, solveResult, solveResult.ok ? "可放入" : "不可放入");
+    if (animate && lastPath.length) {
+      animatePath(lastPath, !solveResult.ok);
+    } else if (active) {
+      setPartPose(active.finalPose, !solveResult.ok);
+    }
+  }
+
+  function buildSummary(values, solveResult, status) {
+    const lines = [
+      `凹位装配模拟验证器 3D ${C3.meta.version}（${C3.meta.mode}）`,
+      `状态：${status}`,
+      `顶部净宽/净深：${values.topWidth} / ${values.topDepth} mm；开口：${values.entryWidth} × ${values.entryDepth} mm`,
+      `退进 左/右/前/后：${values.leftInset} / ${values.rightInset} / ${values.frontInset} / ${values.backInset} mm`,
+      `高度 左/右/前/后：${values.leftHeight} / ${values.rightHeight} / ${values.frontHeight} / ${values.backHeight} mm`,
+      `零件：${values.partLength} × ${values.partWidth} × ${values.partHeight} mm`,
+      `离顶：${values.topGap} mm；间隙：${values.clearance} mm`
+    ];
+    if (solveResult && solveResult.ok) lines.push(`装入方式：${strategyText(solveResult)}`);
+    if (solveResult && solveResult.finalPose) lines.push(`最终落位：${placeText(solveResult.finalPose)}`);
+    if (solveResult && solveResult.maxLength != null) lines.push(`最大可放长度：约 ${solveResult.maxLength} mm`);
+    if (solveResult && solveResult.diagnostics && solveResult.diagnostics.margin != null) {
+      lines.push(`余量：约 ${solveResult.diagnostics.margin} mm`);
+    }
+    if (solveResult && solveResult.error) lines.push(`说明：${solveResult.error}`);
+    if (solveResult && solveResult.diagnostics && solveResult.diagnostics.firstHit) {
+      lines.push(`干涉：${solveResult.diagnostics.firstHit.reason}`);
+    }
+    return lines.join("\n");
+  }
+
+  // ---------------------------------------------------------------------------
+  // 求解调度（Worker 优先，可取消；失败回退主线程）
+  // ---------------------------------------------------------------------------
+
+  function createWorker() {
+    if (workerDisabled || !workerSource) return null;
+    try {
+      const blob = new Blob([workerSource], { type: "application/javascript" });
+      const url = URL.createObjectURL(blob);
+      const w = new Worker(url);
+      URL.revokeObjectURL(url);
+      w.onmessage = onWorkerMessage;
+      w.onerror = onWorkerError;
+      return w;
+    } catch (err) {
+      workerDisabled = true;
+      return null;
+    }
+  }
+
+  function initWorker() {
+    const core2 = document.getElementById("eisv-core");
+    const core3 = document.getElementById("eisv-core3d");
+    if (!core2 || !core3) return;
+    workerSource = `${core2.textContent}
+${core3.textContent}
+self.onmessage = function (e) {
+  var data = e.data || {};
+  try {
+    var result = self.EISV_CORE3D.solve(data.request);
+    self.postMessage({ token: data.token, ok: true, result: result });
+  } catch (err) {
+    self.postMessage({ token: data.token, ok: false, error: String(err && err.message || err) });
+  }
+};
+`;
+    worker = createWorker();
+  }
+
+  function cancelPendingSolve() {
+    solveToken += 1;
+    if (pendingJob && worker) {
+      worker.terminate();
+      worker = createWorker();
+    }
+    pendingJob = null;
+    validateBtn.disabled = false;
+  }
+
+  function onWorkerMessage(e) {
+    const data = e.data || {};
+    const job = pendingJob;
+    if (!job || data.token !== job.token || job.token !== solveToken) return;
+    pendingJob = null;
+    validateBtn.disabled = false;
+    if (!data.ok) {
+      setResultState("fail", "计算失败", data.error || "Worker 异常");
+      return;
+    }
+    applySolveResult(data.result, job.values, { animate: job.animate });
+  }
+
+  function onWorkerError(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    const job = pendingJob;
+    pendingJob = null;
+    if (worker) worker.terminate();
+    worker = null;
+    workerDisabled = true;
+    if (job && job.token === solveToken) solveOnMainThread(job);
+  }
+
+  function solveOnMainThread(job) {
+    window.setTimeout(function () {
+      if (job.token !== solveToken) return;
+      const solved = C3.solve(job.request);
+      validateBtn.disabled = false;
+      applySolveResult(solved, job.values, { animate: job.animate });
+    }, job.animate ? 20 : 0);
+  }
+
+  function readInputs() {
+    const out = {};
+    FIELD_KEYS.forEach(function (key) {
+      out[key] = Number(inputs[key].value);
+    });
+    return out;
+  }
+
+  function runSolve(options) {
+    cancelPendingSolve();
+    const values = readInputs();
+    const request = C3.buildSolveRequest(values, { keepPath: true, estimateMax: true });
+    const localError = C3.validateValues(values);
+    if (localError) {
+      applySolveResult(C.errorResult(localError, values.clearance, "3d"), values, { animate: false });
+      return;
+    }
+    if (!options.quiet) setResultState("wait", "正在计算", "正在按当前尺寸搜索三维装入路径。");
+    if (options.animate) {
+      validateBtn.disabled = true;
+      replayBtn.disabled = true;
+    }
+    const job = { token: solveToken, request, values, animate: Boolean(options.animate) };
+    if (worker) {
+      try {
+        pendingJob = job;
+        worker.postMessage({ token: job.token, request });
+        return;
+      } catch (err) {
+        pendingJob = null;
+      }
+    }
+    solveOnMainThread(job);
+  }
+
+  function scheduleLiveSolve() {
+    window.clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(function () {
+      runSolve({ animate: false, quiet: true });
+    }, 260);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 输入、预设、URL、复制
+  // ---------------------------------------------------------------------------
+
+  function applyValuesToInputs(values) {
+    FIELD_KEYS.forEach(function (key) {
+      if (values[key] != null && Number.isFinite(values[key])) inputs[key].value = String(values[key]);
+    });
+  }
+
+  function writeUrlState(values) {
+    try {
+      const params = new URLSearchParams();
+      Object.keys(URL_KEYS).forEach(function (shortKey) {
+        const v = values[URL_KEYS[shortKey]];
+        if (Number.isFinite(v)) params.set(shortKey, C.formatInputValue(v));
+      });
+      const qs = params.toString();
+      history.replaceState(null, "", qs ? `${location.pathname}?${qs}${location.hash}` : `${location.pathname}${location.hash}`);
+    } catch (err) {
+      /* file:// or restricted */
+    }
+  }
+
+  function readUrlState() {
+    try {
+      const params = new URLSearchParams(location.search);
+      const patch = {};
+      let any = false;
+      Object.keys(URL_KEYS).forEach(function (shortKey) {
+        if (!params.has(shortKey)) return;
+        const n = Number(params.get(shortKey));
+        if (Number.isFinite(n)) {
+          patch[URL_KEYS[shortKey]] = n;
+          any = true;
+        }
+      });
+      return any ? patch : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function setActivePreset(id) {
+    document.querySelectorAll("#presetRow .preset-btn").forEach(function (btn) {
+      btn.classList.toggle("is-active", btn.dataset.preset === id);
+    });
+  }
+
+  function applyPreset(preset) {
+    applyValuesToInputs(preset.values);
+    writeUrlState(preset.values);
+    setActivePreset(preset.id);
+    updateDiagram(preset.values);
+    runSolve({ animate: false, quiet: true });
+  }
+
+  function buildPresetButtons() {
+    const row = document.getElementById("presetRow");
+    row.replaceChildren();
+    PRESETS.forEach(function (preset) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "preset-btn";
+      btn.dataset.preset = preset.id;
+      btn.textContent = preset.label;
+      btn.addEventListener("click", function () {
+        applyPreset(preset);
+      });
+      row.appendChild(btn);
+    });
+  }
+
+  async function copyResult() {
+    const text = lastSummary || buildSummary(readInputs(), lastResult, resultTitle.textContent);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      const prev = copyBtn.textContent;
+      copyBtn.textContent = "已复制";
+      window.setTimeout(function () {
+        copyBtn.textContent = prev;
+      }, 1200);
+    } catch (err) {
+      const kind = ["ok", "fail", "wait"].find(function (k) { return result.classList.contains(k); }) || "wait";
+      setResultState(kind, resultTitle.textContent, "复制失败，请手动选择结果文本。");
+    }
+  }
+
+  function onInput(changedKey) {
+    cancelPartAnimation();
+    cancelPendingSolve();
+    const values = readInputs();
+    const patch = C3.linkedInputPatch(values, changedKey);
+    Object.keys(patch).forEach(function (key) {
+      if (inputs[key]) inputs[key].value = C.formatInputValue(patch[key]);
+    });
+    const next = readInputs();
+    writeUrlState(next);
+    setActivePreset("");
+    lastPath = [];
+    replayBtn.disabled = true;
+    updateDiagram(next);
+    scheduleLiveSolve();
+  }
+
+  FIELD_KEYS.forEach(function (key) {
+    inputs[key].addEventListener("input", function () {
+      onInput(key);
+    });
+  });
+
+  validateBtn.addEventListener("click", function () {
+    runSolve({ animate: true, quiet: false });
+  });
+  resetBtn.addEventListener("click", function () {
+    applyPreset(PRESETS[0]);
+  });
+  replayBtn.addEventListener("click", function () {
+    animatePath(lastPath, !lastCanFit);
+  });
+  copyBtn.addEventListener("click", copyResult);
+
+  initWorker();
+  buildPresetButtons();
+
+  const fromUrl = readUrlState();
+  if (fromUrl) {
+    const merged = { ...D0, ...fromUrl };
+    // URL 只带部分参数时按联动规则补全开口，避免与默认值组合出矛盾尺寸
+    if (!("entryWidth" in fromUrl)) Object.assign(merged, C3.linkedInputPatch(merged, "rightInset"));
+    else if (!("rightInset" in fromUrl)) Object.assign(merged, C3.linkedInputPatch(merged, "entryWidth"));
+    if (!("entryDepth" in fromUrl)) Object.assign(merged, C3.linkedInputPatch(merged, "backInset"));
+    else if (!("backInset" in fromUrl)) Object.assign(merged, C3.linkedInputPatch(merged, "entryDepth"));
+    applyValuesToInputs(merged);
+    setActivePreset("");
+  } else {
+    applyValuesToInputs(D0);
+    setActivePreset("default");
+  }
+
+  updateDiagram(readInputs());
+  scheduleLiveSolve();
+})();
+
+  </script>
+</body>
+</html>

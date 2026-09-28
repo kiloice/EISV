@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="eisv-version" content="{{VERSION}}">
+  <link rel="icon" href="data:,">
+  <title>凹位装配模拟验证器 3D v{{VERSION}}</title>
+  <style>
+{{BASE_CSS}}
+    /* —— V2：四视图 —— */
+    .views {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 1px;
+      background: var(--line);
+    }
+
+    .view {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .view .svg-wrap {
+      height: 100%;
+      padding: 22px 8px 8px;
+    }
+
+    .view-title {
+      position: absolute;
+      top: 6px;
+      left: 10px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      pointer-events: none;
+    }
+
+    .part-poly {
+      fill: var(--part-fill);
+      stroke: var(--part);
+      stroke-width: var(--draft-thick);
+      stroke-linejoin: miter;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .part-edge {
+      fill: none;
+      stroke: var(--part);
+      stroke-width: var(--draft-thin);
+      vector-effect: non-scaling-stroke;
+    }
+
+    .blocked .part-poly { fill: rgba(180, 50, 50, 0.14); stroke: var(--warn); }
+    .blocked .part-edge { stroke: var(--warn); }
+
+    .ghost-poly {
+      fill: none;
+      stroke: rgba(140, 255, 200, 0.75);
+      stroke-width: var(--draft-thin);
+      stroke-dasharray: 4 2.5;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .hidden-line {
+      fill: none;
+      stroke: rgba(230, 245, 255, 0.55);
+      stroke-width: var(--draft-thin);
+      stroke-dasharray: 3 2.5;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .axis-label {
+      fill: var(--muted);
+      font-size: 9px;
+      font-weight: 600;
+    }
+
+    .sub-title {
+      margin: 4px 0 -2px;
+      color: #d7ecfa;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+    }
+
+    @media (max-width: 900px) {
+      .workspace {
+        grid-template-rows: minmax(62vh, 72vh) auto;
+      }
+
+      .stage {
+        min-height: 62vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <p class="brand">EISV凹位装配模拟验证器 3D V{{VERSION}}</p>
+      <p class="hint">改参即重算 · 平移 + 偏航 + 倾转 · 三维近似 · 正式加工请 CAD 复核</p>
+    </header>
+
+    <section class="workspace" aria-label="三维凹位装配验证工具">
+      <div class="stage">
+        <svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+          <defs>
+            <marker id="dimArrowEnd" viewBox="0 0 10 6" refX="9.5" refY="3" markerWidth="9" markerHeight="6" orient="auto" markerUnits="strokeWidth">
+              <path d="M0 0.4 L9.5 3 L0 5.6 Z" fill="#ffffff"></path>
+            </marker>
+            <marker id="dimArrowStart" viewBox="0 0 10 6" refX="0.5" refY="3" markerWidth="9" markerHeight="6" orient="auto" markerUnits="strokeWidth">
+              <path d="M10 0.4 L0.5 3 L10 5.6 Z" fill="#ffffff"></path>
+            </marker>
+          </defs>
+        </svg>
+        <div class="views">
+          <div class="view">
+            <p class="view-title">主视图（左右剖面）</p>
+            <div class="svg-wrap"><svg id="viewFront" role="img" aria-label="主视图：宽度与高度方向"></svg></div>
+          </div>
+          <div class="view">
+            <p class="view-title">左视图（前后剖面）</p>
+            <div class="svg-wrap"><svg id="viewSide" role="img" aria-label="左视图：深度与高度方向"></svg></div>
+          </div>
+          <div class="view">
+            <p class="view-title">俯视图</p>
+            <div class="svg-wrap"><svg id="viewTop" role="img" aria-label="俯视图：宽度与深度方向"></svg></div>
+          </div>
+          <div class="view">
+            <p class="view-title">轴测图（自下方看向凹腔）</p>
+            <div class="svg-wrap"><svg id="viewIso" role="img" aria-label="轴测图"></svg></div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="controls" aria-label="尺寸输入和计算结果">
+        <div class="panel panel-presets">
+          <p class="panel-title">预设凹位</p>
+          <div class="preset-row" id="presetRow"></div>
+        </div>
+
+        <div class="panel panel-cavity">
+          <p class="panel-title">空腔尺寸</p>
+          <fieldset>
+            <legend>空腔尺寸</legend>
+            <div class="input-grid">
+              <label for="topWidthInput">顶部净宽（mm）
+                <input id="topWidthInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="topDepthInput">顶部净深（mm）
+                <input id="topDepthInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="entryWidthInput">开口宽度（mm）
+                <input id="entryWidthInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="entryDepthInput">开口深度（mm）
+                <input id="entryDepthInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+            </div>
+            <p class="sub-title">退进</p>
+            <div class="input-grid">
+              <label for="leftInsetInput">左侧退进（mm）
+                <input id="leftInsetInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+              <label for="rightInsetInput">右侧退进（mm）
+                <input id="rightInsetInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+              <label for="frontInsetInput">前侧退进（mm）
+                <input id="frontInsetInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+              <label for="backInsetInput">后侧退进（mm）
+                <input id="backInsetInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+            </div>
+            <p class="sub-title">空腔高度</p>
+            <div class="input-grid">
+              <label for="leftHeightInput">左侧高度（mm）
+                <input id="leftHeightInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="rightHeightInput">右侧高度（mm）
+                <input id="rightHeightInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="frontHeightInput">前侧高度（mm）
+                <input id="frontHeightInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="backHeightInput">后侧高度（mm）
+                <input id="backHeightInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+            </div>
+            <p class="sub-title">左右圆角</p>
+            <div class="input-grid">
+              <label for="leftOuterRadiusInput">左外角半径（mm）
+                <input id="leftOuterRadiusInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+              <label for="leftInnerRadiusInput">左内角半径（mm）
+                <input id="leftInnerRadiusInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+              <label for="rightOuterRadiusInput">右外角半径（mm）
+                <input id="rightOuterRadiusInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+              <label for="rightInnerRadiusInput">右内角半径（mm）
+                <input id="rightInnerRadiusInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+            </div>
+          </fieldset>
+        </div>
+
+        <div class="panel panel-part">
+          <p class="panel-title">放入物体（长方体）</p>
+          <fieldset>
+            <legend>放入物体</legend>
+            <div class="input-grid">
+              <label for="partLengthInput">长度（mm）
+                <input id="partLengthInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="partWidthInput">宽度（mm）
+                <input id="partWidthInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="partHeightInput">高度（mm）
+                <input id="partHeightInput" type="number" inputmode="decimal" min="1" step="0.5">
+              </label>
+              <label for="topGapInput">离顶距离（mm）
+                <input id="topGapInput" type="number" inputmode="decimal" min="0" step="0.5">
+              </label>
+              <label for="clearanceInput">安装间隙（mm）
+                <input id="clearanceInput" type="number" inputmode="decimal" min="0" step="0.1">
+              </label>
+            </div>
+          </fieldset>
+        </div>
+
+        <div class="panel panel-result">
+          <p class="panel-title">结果与操作</p>
+          <div class="actions">
+            <button class="primary" id="validateBtn" type="button">再次计算</button>
+            <button id="resetBtn" type="button">重置</button>
+            <button id="replayBtn" type="button" disabled>重播</button>
+            <button id="copyBtn" type="button" disabled>复制结果</button>
+          </div>
+          <div id="result" class="result wait" aria-live="polite" style="margin-top:10px">
+            <strong id="resultTitle">计算中</strong>
+            <p id="resultCopy">正在根据当前尺寸更新。</p>
+          </div>
+          <div class="metrics" style="margin-top:10px">
+            <div class="metric">
+              <span>最大可放长度</span>
+              <b id="maxLength">--</b>
+            </div>
+            <div class="metric">
+              <span>当前物体</span>
+              <b id="partMetric">--</b>
+            </div>
+            <div class="metric">
+              <span>装入方式</span>
+              <b id="strategyMetric">--</b>
+            </div>
+            <div class="metric">
+              <span>最终落位</span>
+              <b id="placeMetric">--</b>
+            </div>
+            <div class="metric">
+              <span>顶部 宽×深</span>
+              <b id="topMetric">--</b>
+            </div>
+            <div class="metric">
+              <span>开口 宽×深</span>
+              <b id="entryMetric">--</b>
+            </div>
+          </div>
+          <p class="note" style="margin-top:10px">三维近似：长方体零件 · 平移 + 偏航 + 倾转 5 自由度 · 精确碰撞判定 · 单文件离线可用 · 正式加工请 CAD 复核</p>
+        </div>
+      </aside>
+    </section>
+
+    <footer class="app-footer">
+      <span>EISV · Engineering Installation Simulation Validator · 3D</span>
+      <span>Author Tony.D · © 2026 · GPL-3.0 License</span>
+    </footer>
+  </div>
+
+  <script id="eisv-core">
+{{CORE}}
+  </script>
+  <script id="eisv-core3d">
+{{CORE3D}}
+  </script>
+  <script>
+{{APP}}
+  </script>
+</body>
+</html>

@@ -1711,6 +1711,8 @@
 
   function solve(request) {
     const mode = request.mode || "2d";
+    // v2：三维请求交给 EISV_CORE3D（eisv-core3d.js 已加载时），不改变 solve 契约
+    if (mode === "3d" && global.EISV_CORE3D) return global.EISV_CORE3D.solve(request);
     if (mode !== "2d") {
       return errorResult(`模式 ${mode} 尚未实现（v1 仅支持 2d）。`, 0, mode);
     }
